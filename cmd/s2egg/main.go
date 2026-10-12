@@ -16,6 +16,7 @@ import (
 
 	"github.com/s2script/s2script-cs2-egg/internal/alerts"
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
+	"github.com/s2script/s2script-cs2-egg/internal/buildinfo"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/guard"
@@ -37,6 +38,10 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 	}
 	if len(args) == 0 {
 		return usage()
+	}
+	if len(args) == 1 && args[0] == "version" {
+		fmt.Fprintf(out, "s2egg %s (%s)\n", buildinfo.Version, buildinfo.Revision)
+		return 0
 	}
 	command := ""
 	switch args[0] {

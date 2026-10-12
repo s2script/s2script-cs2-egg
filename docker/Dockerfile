@@ -1,13 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # linux/amd64 only. Both targets build from source; no unpublished image dependency.
-FROM --platform=linux/amd64 golang:1.27.2-alpine@sha256:3b15ba438c60ab8fabe5fee3b11025c0049e358b31feff384648f11fc8e335f8 AS build
+FROM golang:1.27.2-alpine@sha256:3b15ba438c60ab8fabe5fee3b11025c0049e358b31feff384648f11fc8e335f8 AS build
+ARG TARGETARCH
+ARG VERSION=dev
+ARG REVISION=unknown
 WORKDIR /src
 COPY go.mod ./
 COPY cmd ./cmd
 COPY internal ./internal
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/s2egg ./cmd/s2egg
+RUN test "$TARGETARCH" = amd64 \
+ && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 GOTOOLCHAIN=local go build -trimpath -buildvcs=false \
+    -ldflags="-s -w -buildid= -X github.com/s2script/s2script-cs2-egg/internal/buildinfo.Version=$VERSION -X github.com/s2script/s2script-cs2-egg/internal/buildinfo.Revision=$REVISION" \
+    -o /out/s2egg ./cmd/s2egg
 
-FROM --platform=linux/amd64 registry.gitlab.steamos.cloud/steamrt/sniper/platform@sha256:8cd1bdfc418afd8b019a69d6f5a9305865a5f3bb5554102006fdb8f6853d5f67 AS steamrt
+FROM registry.gitlab.steamos.cloud/steamrt/sniper/platform@sha256:8cd1bdfc418afd8b019a69d6f5a9305865a5f3bb5554102006fdb8f6853d5f67 AS steamrt
 
 # Re-export SteamRT's rootfs to normalize its absolute hardlink targets.
 # Approach researched from K4ryuu/CS2-Egg-Go; see NOTICE.
@@ -26,7 +32,13 @@ RUN useradd --uid 1000 --create-home --home-dir /home/container --shell /bin/bas
  && test -e /lib/ld-linux.so.2
 COPY --from=build --chmod=0555 /out/s2egg /usr/local/bin/s2egg
 COPY LICENSE NOTICE third_party/Go-LICENSE /usr/local/share/licenses/s2egg/
-LABEL org.opencontainers.image.source="https://github.com/s2script/s2script-cs2-egg" \
+ARG VERSION=dev
+ARG REVISION=unknown
+ARG SOURCE_ARCHIVE=unreleased
+LABEL org.opencontainers.image.version="$VERSION" \
+      org.opencontainers.image.revision="$REVISION" \
+      org.s2script.corresponding-source="$SOURCE_ARCHIVE" \
+      org.opencontainers.image.source="https://github.com/s2script/s2script-cs2-egg" \
       org.opencontainers.image.licenses="GPL-3.0-or-later" \
       org.opencontainers.image.description="CS2 with Metamod and S2Script; standalone supervised lifecycle"
 ENV USER=container HOME=/home/container

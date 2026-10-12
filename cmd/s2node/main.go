@@ -42,6 +42,10 @@ func run(args []string, out, errs io.Writer) int {
 		fmt.Fprintln(errs, "usage: s2node run|config-check|status|top|doctor|logs|logs-list|logs-read|crashes|crash-read|cleanup-plan|cleanup-apply|operations-job|delivery-status|delivery-archive|delivery-finalize|delivery-migrate|dumps|dump-retain|dump-export|shared-build|shared-prune|shared-attach|cache-status|cache-sync|cache-prune|workshop-status|workshop-sync|workshop-prune|helper-run --config PATH | install --directory PATH")
 		return 2
 	}
+	if len(args) == 1 && args[0] == "version" {
+		fmt.Fprintf(out, "s2node %s (%s)\n", buildinfo.Version, buildinfo.Revision)
+		return 0
+	}
 	command := args[0]
 	if strings.HasPrefix(command, "project-") {
 		return projectCLI(command, args[1:], out, errs)
@@ -57,7 +61,7 @@ func run(args []string, out, errs io.Writer) int {
 	}
 	flags := flag.NewFlagSet("s2node", flag.ContinueOnError)
 	flags.SetOutput(errs)
-	_ = flags.Bool("json", false, "JSON output")
+	jsonOutput := flags.Bool("json", false, "JSON output")
 	source := flags.String("source", "", "cache source: s2script/metamod/mam/registry")
 	name := flags.String("name", "", "registry package identity")
 	version := flags.String("version", "", "exact artifact version")
@@ -247,6 +251,12 @@ func run(args []string, out, errs io.Writer) int {
 		fmt.Fprintln(out, "node configuration valid; configured volumes and access groups available; service sandbox and remote delivery untested")
 		return 0
 	case "doctor":
+		if *jsonOutput {
+			if e := json.NewEncoder(out).Encode(doctorResult(cfg)); e != nil {
+				return 1
+			}
+			return 0
+		}
 		fmt.Fprintf(out, "observability: enabled=%v privateMetrics=%q\nlogs: %d bytes × %d/server; tail %d bytes; crashes %d bytes × %d/server\nqueue archives: exact retained evidence, 64 segments/256 MiB; no TTL deletion\nbinary dumps: separate sensitive opt-in helper policy; no automatic upload\n", cfg.Observability.Enabled, cfg.Observability.PrivateMetrics, cfg.Observability.LogBytes, cfg.Observability.LogFiles, cfg.Observability.TailBytes, cfg.Observability.CrashBytes, cfg.Observability.CrashFiles)
 		fmt.Fprintln(out, "configuration: valid\nidentity: configured socket plus expected peer UID; container mount confinement required\nserver sockets: daemon-owned 0660; configured access GID required\nstatus: reported by runtime protocol; no report means unknown\nexisting runtime/artifact leases and status socket default to 0600; a separate UID cannot use group membership to access them\nadministrative stopped operations require cooperative caller-owned locks or an explicitly reviewed narrow access contract; inaccessible never means stopped")
 		for _, s := range cfg.Servers {

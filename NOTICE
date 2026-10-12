@@ -5,8 +5,10 @@ Project code is licensed under the GNU General Public License, version 3
 or (at your option) any later version. See LICENSE for the complete text.
 
 CS2-Egg-Go by K4ryuu supplied the operational feature reference and its
-GPL-3.0-or-later licensing requirement. The guard console grammar was researched/adapted from internal/egg/guard/guard.go
-at that same revision; detector, correlation, privilege and policy code is implemented here.
+GPL-3.0-or-later licensing requirement. The guard console grammar was researched/adapted
+from internal/egg/guard/guard.go at revision
+2ceeea15825b52856a7ef157e8bd70ffb7ab2cbf; detector, correlation, privilege
+and policy code is implemented here.
 No upstream product module is imported. The container rootfs re-export
 approach was adapted from its docker/KitsuneLab-Dockerfile at revision
 2ceeea15825b52856a7ef157e8bd70ffb7ab2cbf. Project adaptations remain GPL-3.0-or-later.

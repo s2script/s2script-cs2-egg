@@ -28,4 +28,4 @@ Local Docker daemon access was unavailable (permission denied at `/var/run/docke
 7. Select the debug image, restrict an allocated TCP port, attach/continue within readiness timeout, and confirm no up while waiting. Turn debug off and verify ordinary startup. Assess any scoped ptrace permission separately on the test host.
 8. Record a stopped persistent backup, source commit and image IDs. Recreate with retained state, then rehearse rollback into a separate volume and verify framework/plugin versions and policy. Image replacement alone does not reverse downloaded game state.
 
-Record date, source/image IDs, panel/Wings revisions and actual outputs for every exercised item. Task16 tracks final acceptance; later node tasks do not silently inherit standalone native acceptance. No public playable-release claim should be based only on unit tests or image construction.
+Record date, source/image IDs, panel/Wings revisions and actual outputs for every exercised item. [The acceptance record](acceptance.md) tracks each native and node scenario independently. No public playable-release claim should be based only on unit tests or image construction.

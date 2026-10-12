@@ -73,20 +73,19 @@ func LoadHelperConfig(path string) (HelperConfig, error) {
 	}
 	return c, nil
 }
-func (c HelperConfig) validate() error {
+
+// ValidateStructure checks policy without opening directories or proving provisioning.
+func (c HelperConfig) ValidateStructure() error {
 	if c.Volume == "" || c.Socket == "" || c.SharedRoot == "" && c.WorkshopRoot == "" && c.Operations == nil && c.Backup == nil {
 		return errors.New("fixed helper volume/socket/store required")
 	}
 	for _, p := range []string{c.Volume, c.SharedRoot, c.WorkshopRoot, c.Socket} {
-		if p == "" {
-			continue
-		}
-		if !filepath.IsAbs(p) || filepath.Clean(p) != p || p == "/" {
+		if p != "" && (!filepath.IsAbs(p) || filepath.Clean(p) != p || p == "/") {
 			return errors.New("helper paths must be fixed clean absolute paths")
 		}
 	}
-	if c.RuntimeUID != uint32(os.Geteuid()) || c.RuntimeUID == 0 || c.NodeUID == c.RuntimeUID || c.AccessGID < 0 {
-		return errors.New("helper needs actual non-root volume UID, distinct daemon UID and configured common GID")
+	if c.RuntimeUID == 0 || c.NodeUID == c.RuntimeUID || c.AccessGID < 0 {
+		return errors.New("helper needs non-root volume UID, distinct daemon UID and configured common GID")
 	}
 	overlap := func(a, b string) bool { return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/") }
 	if c.SharedRoot != "" && (overlap(c.Volume, c.SharedRoot) || overlap(c.Socket, c.SharedRoot)) || overlap(c.Socket, c.Volume) || c.WorkshopRoot != "" && (overlap(c.Volume, c.WorkshopRoot) || overlap(c.Socket, c.WorkshopRoot)) {
@@ -104,9 +103,6 @@ func (c HelperConfig) validate() error {
 		if c.Operations != nil && overlap(c.Backup.Root, c.Operations.Root) {
 			return errors.New("backup and operations roots must be separate")
 		}
-		if _, e := backup.Open(c.Volume, *c.Backup); e != nil {
-			return e
-		}
 	}
 	if c.Operations != nil {
 		if e := c.Operations.Validate(); e != nil {
@@ -115,6 +111,22 @@ func (c HelperConfig) validate() error {
 		if overlap(c.Operations.Root, c.Volume) || overlap(c.Operations.Root, c.Socket) || c.SharedRoot != "" && overlap(c.Operations.Root, c.SharedRoot) || c.WorkshopRoot != "" && overlap(c.Operations.Root, c.WorkshopRoot) {
 			return errors.New("operations root must be separate from volume/socket/stores")
 		}
+	}
+	return nil
+}
+func (c HelperConfig) validate() error {
+	if e := c.ValidateStructure(); e != nil {
+		return e
+	}
+	if c.RuntimeUID != uint32(os.Geteuid()) {
+		return errors.New("helper must run as configured non-root volume UID")
+	}
+	if c.Backup != nil {
+		if _, e := backup.Open(c.Volume, *c.Backup); e != nil {
+			return e
+		}
+	}
+	if c.Operations != nil {
 		d, e := artifact.OpenDirectory(c.Operations.Root)
 		if e != nil {
 			return e

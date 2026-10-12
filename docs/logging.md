@@ -22,7 +22,7 @@ s2node crashes --config /etc/s2node/node.json --server SERVER_ID
 s2node crash-read --config /etc/s2node/node.json --server SERVER_ID --id ARTIFACT_ID --offset 0
 ```
 
-Lists are paged (default/max 128). Reads return JSON with base64 data, size and ID in chunks up to 64 KiB; increment `--offset` for the next chunk. `logs` returns the in-memory tail. Node text reads do not need access to private runtime files and work while games run. `--private` selects the configured actual-UID helper for standalone sealed logs/crashes; that helper needs the fixed standalone `server_id`. Missing helper authority fails closed.
+Lists are paged (default/max 128). CLI read commands decode and write the requested text bytes in chunks up to 64 KiB; increment `--offset` for the next chunk. The private wire reply encodes its byte field as JSON/base64 and also carries size and ID. `logs` returns the in-memory tail. Node text reads do not need access to private runtime files and work while games run. `--private` selects the configured actual-UID helper for standalone sealed logs/crashes; that helper needs the fixed standalone `server_id`. Missing helper authority fails closed.
 
 ## Sensitive binary dumps
 

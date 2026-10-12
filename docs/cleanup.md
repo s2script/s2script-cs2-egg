@@ -39,7 +39,7 @@ Runtime protocol/envelope schema 1 remains byte-compatible; host operational env
 s2node delivery-migrate --config /etc/s2node/node.json
 ```
 
-The daemon lock is mandatory. Migration preserves old record keys/digests, owners and pending envelopes and writes an exact private fsynced `delivery-before-v2.json` before atomic format-2 replacement. A differing prior backup is refused. Read-only status/config inspection never migrates. Pre-Task-12 binaries reject format 2. The migration copy is protected recovery material, not an ordinary cleanup target. Task15's global release-state ABI begins at 1 encompassing these final formats; future update candidates must remain readable by the previous installed release and cannot perform automatic irreversible migration.
+The daemon lock is mandatory. Migration preserves old record keys/digests, owners and pending envelopes and writes an exact private fsynced `delivery-before-v2.json` before atomic format-2 replacement. A differing prior backup is refused. Read-only status/config inspection never migrates. Binaries supporting only delivery format 1 reject format 2. The migration copy is protected recovery material, not an ordinary cleanup target. The global release-state ABI begins at 1 encompassing these final formats; future update candidates must remain readable by the previous installed release and cannot perform automatic irreversible migration.
 
 ## Interrupted-operation recovery
 

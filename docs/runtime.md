@@ -65,7 +65,7 @@ A sink **must honor context cancellation**; Go cannot force an arbitrary noncomp
 | `server.warning` | Retained generation and framework warnings |
 | `server.plugin_check` | Bounded name/status/available-version outcome, without raw metadata |
 
-The default webhook selection now uses `server.start_failed`. Legacy `startup.failure` remains accepted configuration; the dispatcher normalizes it to `server.start_failed` and deduplicates selection so one event is not delivered twice. Standalone delivery cannot be guaranteed after SIGKILL, host failure or power loss. The packaged source milestone includes webhook delivery and both runtime/debug build targets; actual image and native acceptance evidence remains separate.
+The default webhook selection now uses `server.start_failed`. Legacy `startup.failure` remains accepted configuration; the dispatcher normalizes it to `server.start_failed` and deduplicates selection so one event is not delivered twice. Standalone delivery cannot be guaranteed after SIGKILL, host failure or power loss. The source distribution includes webhook delivery and both runtime/debug build targets; actual image and native acceptance evidence remains separate.
 
 ## Text observability
 

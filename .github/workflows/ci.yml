@@ -31,6 +31,13 @@ jobs:
           CGO_ENABLED: '0'
           GOOS: linux
           GOARCH: amd64
+      - name: Release contract and examples (offline fixtures)
+        run: make release-check
+      - name: Validate actual public schema producers
+        run: |
+          python3 -m venv "$RUNNER_TEMP/schema"
+          "$RUNNER_TEMP/schema/bin/pip" install -r tests/schema-requirements.txt
+          make schema-check SCHEMA_PYTHON="$RUNNER_TEMP/schema/bin/python"
       - name: Check formatting
         run: test -z "$(gofmt -l cmd internal tests)"
   images:

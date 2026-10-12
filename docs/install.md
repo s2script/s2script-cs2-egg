@@ -1,6 +1,29 @@
 # Install and verify the standalone server
 
-This is a source-build milestone for Linux x86-64. No public image or downloadable release is published. The Dockerfile has shared `runtime` and `debug` targets; its default target is `runtime`. Local process/HTTP fixtures pass, but native CS2, SteamCMD initialization, Metamod/S2Script loading, panel import and HUD acceptance require the checklist in [testing.md](testing.md). Local Docker access was unavailable during implementation.
+Linux x86-64 is the supported platform. Use source builds until the selected release has passed [public availability verification](releases.md). The Dockerfile has shared `runtime` and `debug` targets; its default target is `runtime`. Local process/HTTP fixtures pass, but native CS2, SteamCMD initialization, Metamod/S2Script loading, panel import and HUD acceptance require the checklist in [testing.md](testing.md). Local Docker access was unavailable during implementation.
+
+## Host preparation
+
+Use Linux amd64 with a working Docker/SteamRT environment and persistent storage
+writable by container UID 1000. Measure the current CS2 installation size before
+setting panel disk limits: allow space for downloads, updates and rollback copies,
+plus plugin data, workshop items and backups. Shared generations coexist during
+updates; the shared store defaults to a 64 GiB free-space reserve. Backup storage
+has separate quotas and reserves. A small panel disk limit can block a safe update.
+
+Allocate CPU/RAM for the intended player count and plugins, then load-test that
+configuration; fixtures do not establish a production capacity guarantee. Give
+first installation enough time to download app 730 before applying operational
+startup timeouts.
+
+Allow the assigned game port for UDP query/client traffic and required TCP
+traffic. Use a reachable public allocation/NAT mapping. Keep optional debug TCP
+and host administrator sockets private. Permit outbound DNS/HTTPS and the Steam
+services required for download/authentication. Obtain a GSLT from Valve's
+[game server account page](https://steamcommunity.com/dev/managegameservers);
+supply it privately as STEAM_ACC. Do not reuse example credentials.
+
+## Build from source
 
 Build on a Docker host with sufficient disk for CS2 and its persistent updates:
 
@@ -60,4 +83,4 @@ Record the source commit, image ID (`docker image inspect`), generated egg, priv
 
 An image-only rollback replaces the container with the previous image while reusing the persistent volume. It does **not** roll back downloaded CS2/framework/plugin state. To return that state too, restore a stopped, consistent backup and its plugin inventory/lock/configuration, then use the previous image. Restore into a separate test volume first, run configuration/doctor checks, and complete native acceptance before switching production. Avoid startup `latest` updates while validating a retained generation: use exact verified framework/plugin pins and the documented update policy. `SRCDS_STOP_UPDATE=1` disables app updates but cannot eliminate bootstrap initialization for an incomplete installation.
 
-Preserve the whole root: game/Steam manifests, `steamcmd`, `.steam`, `egg` identity/config/cache/state and installed-plugin lists/locks/config/data. Deleting the volume discards those. This milestone has no automated backup/restore or node-managed rollback; those are later work. See [webhook ownership and delivery limits](webhooks.md).
+Preserve the whole root: game/Steam manifests, `steamcmd`, `.steam`, `egg` identity/config/cache/state and installed-plugin lists/locks/config/data. Deleting the volume discards those. The optional node supports [consistent backups and stopped restores](backups.md), retained shared generations and [managed node rollback](project-updates.md). See [webhook ownership and delivery limits](webhooks.md).

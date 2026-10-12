@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Explicit live profile: downloads real game data. Never started by automated CI.
+services:
+  server-a:
+    profiles: [live]
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile
+      target: runtime
+    platform: linux/amd64
+    image: s2script-cs2-egg:acceptance
+    stdin_open: true
+    stop_grace_period: 30s
+    environment:
+      STEAM_ACC: ${S2_ACCEPTANCE_GSLT_A:-}
+      SERVER_PORT: '27015'
+      DISCORD_WEBHOOK_URL: ''
+    ports: ['27015:27015/udp', '27015:27015/tcp']
+    volumes: [server-a:/home/container]
+  server-b:
+    profiles: [live]
+    image: s2script-cs2-egg:acceptance
+    platform: linux/amd64
+    stdin_open: true
+    stop_grace_period: 30s
+    environment:
+      STEAM_ACC: ${S2_ACCEPTANCE_GSLT_B:-}
+      SERVER_PORT: '27016'
+      DISCORD_WEBHOOK_URL: ''
+    ports: ['27016:27016/udp', '27016:27016/tcp']
+    volumes: [server-b:/home/container]
+volumes:
+  server-a:
+  server-b:

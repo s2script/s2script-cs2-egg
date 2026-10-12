@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Release
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+concurrency:
+  group: release-s2script-cs2-egg
+  cancel-in-progress: false
+jobs:
+  check:
+    if: github.repository == 's2script/s2script-cs2-egg'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Validate, test and package exact source
+        run: |
+          tag="$(python3 scripts/release.py event)"
+          make test vet egg-check release-check
+          go test -race ./...
+          python3 -m venv "$RUNNER_TEMP/schema"
+          "$RUNNER_TEMP/schema/bin/pip" install -r tests/schema-requirements.txt
+          make schema-check SCHEMA_PYTHON="$RUNNER_TEMP/schema/bin/python"
+          go run ./cmd/releasectl pack --tag "$tag" --output "$RUNNER_TEMP/release"
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish immutable assets and advance eligible image channels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="$(python3 scripts/release.py event)"
+          go build -trimpath -o "$RUNNER_TEMP/releasectl" ./cmd/releasectl
+          "$RUNNER_TEMP/releasectl" pack --tag "$tag" --output "$RUNNER_TEMP/release"
+          python3 scripts/release.py publish "$RUNNER_TEMP/release" "$RUNNER_TEMP/releasectl"
+  public-verification:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      # Hosted runner supplies buildx. No login action, secret or repository token
+      # enters the verification process; its Docker config starts empty.
+      - name: Verify anonymous public availability
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/anonymous-docker
+        run: |
+          go build -trimpath -o "$RUNNER_TEMP/releasectl" ./cmd/releasectl
+          python3 scripts/release.py public-verify "$RUNNER_TEMP/releasectl"
