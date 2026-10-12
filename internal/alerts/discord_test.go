@@ -338,3 +338,32 @@ func TestCanceledPublishAndCopiedEvent(t *testing.T) {
 		t.Fatal("queued event map was not copied")
 	}
 }
+func TestAcknowledgedDeliveryBoundary(t *testing.T) {
+	var count atomic.Int32
+	client := fixture(t, func(w http.ResponseWriter, r *http.Request) {
+		n := count.Add(1)
+		if n == 1 {
+			w.WriteHeader(503)
+			return
+		}
+		fmt.Fprint(w, `{"id":"confirmed"}`)
+	})
+	d, e := alerts.NewDiscord(alerts.Config{URL: hook, MaxRetries: 0}, client)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer closeOK(t, d)
+	ev := event("same-id", "server.up")
+	if got, e := d.Deliver(context.Background(), ev); got != alerts.Failed || e == nil {
+		t.Fatalf("unacknowledged delivery: %s %v", got, e)
+	}
+	if got, e := d.Deliver(context.Background(), ev); got != alerts.Delivered || e != nil {
+		t.Fatalf("durable retry incorrectly deduped: %s %v", got, e)
+	}
+	if got, e := d.Deliver(context.Background(), event("console", "server.console")); got != alerts.Filtered || e != nil {
+		t.Fatalf("filter %s %v", got, e)
+	}
+	if count.Load() != 2 {
+		t.Fatal("filtered event sent")
+	}
+}

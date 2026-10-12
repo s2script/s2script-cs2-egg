@@ -58,7 +58,7 @@ func TestFailedPreparationWebhookSequence(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	code, e := server.Run(context.Background(), cfg, d, nil, io.Discard, io.Discard)
+	code, e := server.Run(context.Background(), cfg, d, nil, io.Discard, io.Discard, server.Options{})
 	if code == 0 || e == nil {
 		t.Fatal("failed Steam initialization accepted")
 	}

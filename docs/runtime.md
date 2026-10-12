@@ -10,7 +10,7 @@ Only a typed temporary framework download outage permits one retry against `fram
 
 `server.ReconcileLocked(ctx, cfg, request, log)` is the stopped CLI callback boundary. Its caller holds runtime lease then artifact lock and has already called `Recover`. It stages and commits the combined native/plugin update without running SteamCMD or reacquiring either lock. It requires an installed `game/csgo/gameinfo.gi`. Policy-only CLI edits can still save next-start choices while the runtime lease is held; artifact moves/removals cannot.
 
-A future node provider must preserve this ordering. It must not recursively call `Prepare` while the same runtime lease is held. Introduce an explicitly owned preparation/provider integration at that point; this task does not provide node operations or a remote protocol.
+`server.Options{GameProvider: provider}` now supplies the optional node preparation boundary under these existing caller-owned locks. Any provider error aborts; only an explicit unclaimed result permits standalone SteamCMD. Node publication/reservation and local stopped materialization are separate responsibilities. See [node core contract](node.md#preparation-and-downstream-interfaces).
 
 ## SteamCMD and empty installations
 
@@ -44,7 +44,7 @@ Before spawn, binding the configured UDP allocation must succeed and it is then 
 
 The first successful probe emits exactly one `server.up` and the exact panel marker `S2EGG_READY`. Banner text does not establish readiness. Subsequent failures mark live readiness `unresponsive` and players unknown; successful recovery does not emit a second up. The query does **not** prove Metamod/S2Script/plugin loading or client HUD behavior. Actual `meta list`, plugin behavior and client evidence remain release acceptance requirements.
 
-`server.Snapshot(ctx, root)` checks the live runtime lease and queries a mode-0600 Unix socket `.s2egg-status.sock`; it never trusts a PID file or saved status. The snapshot includes RunID, state, readiness, last map, explicitly known/unknown players, versions and intended stop reason. It fails if the owner cannot answer. `egg/server-id` persists a standalone random server identity when no `SERVER_ID` is supplied. RunID changes on every managed run; NodeID is empty until future node integration.
+`server.Snapshot(ctx, root)` checks the live runtime lease and queries a mode-0600 Unix socket `.s2egg-status.sock`; it never trusts a PID file or saved status. The snapshot includes RunID, state, readiness, last map, explicitly known/unknown players, versions and intended stop reason. It fails if the owner cannot answer. `egg/server-id` persists a standalone random server identity when no `SERVER_ID` is supplied. RunID changes on every managed run; NodeID remains empty in standalone raw events; the optional node binds it authoritatively when accepting events.
 
 ## Raw event and webhook sink contract
 

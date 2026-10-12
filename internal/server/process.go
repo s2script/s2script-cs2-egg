@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -76,8 +77,10 @@ func homeEnv(root string) []string {
 // Run owns closable stdin readers until return. File inputs are reopened so the
 // caller's descriptor remains untouched. Sink must honor Publish cancellation.
 // Linux child-subreaper mode is process-wide; reaping is restricted to this PGID.
-func Run(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
-	return runWith(ctx, cfg, sink, stdin, stdout, stderr, runOptions{prepare: prepareRuntime, poll: time.Duration(cfg.Readiness.PollIntervalSeconds) * time.Second, timeout: time.Duration(cfg.Readiness.TimeoutSeconds) * time.Second, shutdown: 10 * time.Second})
+func Run(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.Reader, stdout, stderr io.Writer, options Options) (int, error) {
+	return runWith(ctx, cfg, sink, stdin, stdout, stderr, runOptions{prepare: func(ctx context.Context, cfg config.Server, emit emitFunc) (map[string]string, error) {
+		return prepareRuntimeOptions(ctx, cfg, emit, options)
+	}, poll: time.Duration(cfg.Readiness.PollIntervalSeconds) * time.Second, timeout: time.Duration(cfg.Readiness.TimeoutSeconds) * time.Second, shutdown: 10 * time.Second})
 }
 func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.Reader, stdout, stderr io.Writer, o runOptions) (code int, err error) {
 	for _, arg := range cfg.Launch.ExtraArgs {
@@ -129,6 +132,7 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 	runID := randomID()
 	redact := redactFor(cfg)
 	var eventMu sync.Mutex
+	var currentStatus func() Status
 	emit := func(kind, reason string, details map[string]string) {
 		eventMu.Lock()
 		defer eventMu.Unlock()
@@ -139,6 +143,11 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 		for k, v := range details {
 			clean[redact(k)] = redact(v)
 		}
+		if kind == "server.status" && currentStatus != nil {
+			if encoded, e := json.Marshal(currentStatus()); e == nil {
+				clean["runtime_status"] = string(encoded)
+			}
+		}
 		event := events.Event{Version: 1, Severity: eventSeverity(kind), CorrelationID: runID, ID: randomID(), Type: kind, ServerID: redact(identity), RunID: runID, At: time.Now().UTC(), Reason: redact(reason), Details: clean}
 		if kind == "server.warning" && stderr != nil {
 			fmt.Fprintln(stderr, redact("warning: "+reason+" "+clean["message"]))
@@ -146,6 +155,7 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 		queue.publish(event)
 	}
 	state := &statusStore{status: Status{RunID: runID, State: "preparing", Versions: map[string]string{}}}
+	currentStatus = state.snapshot
 	closeStatus, e := state.serve(cfg.Root)
 	if e != nil {
 		return 1, errors.New("cannot serve local runtime status")

@@ -33,6 +33,16 @@ type statusStore struct {
 	status Status
 }
 
+func (s *statusStore) snapshot() Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	snapshot := s.status
+	snapshot.Versions = map[string]string{}
+	for k, v := range s.status.Versions {
+		snapshot.Versions[k] = v
+	}
+	return snapshot
+}
 func (s *statusStore) update(f func(*Status)) { s.mu.Lock(); defer s.mu.Unlock(); f(&s.status) }
 func (s *statusStore) serve(root string) (func(), error) {
 	path := filepath.Join(root, ".s2egg-status.sock")

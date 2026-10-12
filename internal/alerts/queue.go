@@ -134,3 +134,44 @@ func (d *Dispatcher) worker() {
 		d.mu.Unlock()
 	}
 }
+
+// DeliveryResult describes an actual synchronous transport outcome. Publish's
+// nil return is deliberately NOT this contract.
+type DeliveryResult string
+
+const (
+	Delivered DeliveryResult = "delivered"
+	Filtered  DeliveryResult = "filtered"
+	Failed    DeliveryResult = "failed"
+)
+
+type AcknowledgedDelivery interface {
+	Enabled() bool
+	Accepts(events.Event) bool
+	Deliver(context.Context, events.Event) (DeliveryResult, error)
+}
+
+func (d *Dispatcher) Format(f fmt.State, verb rune) {
+	_, _ = fmt.Fprintf(f, "Dispatcher{stats:%+v}", d.Stats())
+}
+func (d *Dispatcher) Enabled() bool               { return d.cfg.URL != "" }
+func (d *Dispatcher) Accepts(e events.Event) bool { return d.cfg.URL != "" && d.selected[e.Type] }
+
+// Deliver bypasses the asynchronous queue and its in-memory deduplication. The
+// durable caller owns admission, retries and IDs. Failure includes uncertain
+// remote outcomes; retries can duplicate a message whose receipt was lost.
+func (d *Dispatcher) Deliver(ctx context.Context, e events.Event) (DeliveryResult, error) {
+	if err := ctx.Err(); err != nil {
+		return Failed, err
+	}
+	if !d.Accepts(e) {
+		return Filtered, nil
+	}
+	if d.dead.Load() {
+		return Failed, errors.New("webhook endpoint is disabled")
+	}
+	if !d.deliverContext(ctx, e) {
+		return Failed, errors.New("webhook delivery was not acknowledged")
+	}
+	return Delivered, nil
+}

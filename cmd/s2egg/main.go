@@ -16,6 +16,8 @@ import (
 
 	"github.com/s2script/s2script-cs2-egg/internal/alerts"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
+	"github.com/s2script/s2script-cs2-egg/internal/events"
+	"github.com/s2script/s2script-cs2-egg/internal/nodeclient"
 	"github.com/s2script/s2script-cs2-egg/internal/plugins"
 	runtime "github.com/s2script/s2script-cs2-egg/internal/server"
 )
@@ -88,7 +90,20 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 				fmt.Fprintf(errs, "webhook delivery: failed=%d dropped=%d\n", stats.Failed, stats.Dropped)
 			}
 		}()
-		code, e := runtime.Run(context.Background(), server, dispatcher, os.Stdin, out, errs)
+		var sink events.Sink = dispatcher
+		options := runtime.Options{}
+		connectCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		client, connectErr := nodeclient.Connect(connectCtx, filepath.Join(server.Root, "egg/s2node.sock"))
+		cancel()
+		if connectErr == nil {
+			defer client.Close()
+			if client.ServerID() != "" {
+				server.Identity = client.ServerID()
+			}
+			sink = client.Route(dispatcher)
+			options.GameProvider = client
+		}
+		code, e := runtime.Run(context.Background(), server, sink, os.Stdin, out, errs, options)
 		if e != nil {
 			fmt.Fprintln(errs, "server error:", e)
 		}
@@ -98,7 +113,15 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 		// releases its runtime/artifact locks.
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		if e := runtime.Prepare(ctx, server); e != nil {
+		options := runtime.Options{}
+		connectCtx, cancel := context.WithTimeout(ctx, time.Second)
+		client, connectErr := nodeclient.Connect(connectCtx, filepath.Join(server.Root, "egg/s2node.sock"))
+		cancel()
+		if connectErr == nil {
+			defer client.Close()
+			options.GameProvider = client
+		}
+		if e := runtime.Prepare(ctx, server, options); e != nil {
 			fmt.Fprintln(errs, "preparation error:", e)
 			return 1
 		}
