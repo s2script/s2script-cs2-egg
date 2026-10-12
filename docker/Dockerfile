@@ -38,7 +38,11 @@ CMD ["/usr/local/bin/s2egg", "run", "--root", "/home/container"]
 # Explicit opt-in target. GDB_DEBUG_PORT still defaults to 0 in both images.
 FROM base AS debug
 USER root
-RUN apt-get update \
+# Debian moved Bullseye security pools to its archive after LTS ended.
+# Preserve the inherited suites/keyrings and APT authentication/hash checks.
+RUN find /etc/apt -maxdepth 2 -type f \( -name '*.list' -o -name '*.sources' \) \
+      -exec sed -i -E 's#https?://deb\.debian\.org/debian-security(-debug)?([/[:space:]]|$)#https://archive.debian.org/debian-security\1\2#g' {} + \
+ && apt-get update \
  && apt-get install -y --no-install-recommends gdb gdbserver \
  && rm -rf /var/lib/apt/lists/*
 USER container
