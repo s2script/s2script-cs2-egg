@@ -40,6 +40,7 @@ type SharedNode struct {
 	ReserveBytes uint64 `json:"reserve_bytes"`
 }
 type Node struct {
+	Guard         GuardNode     `json:"guard"`
 	Backup        BackupNode    `json:"backup"`
 	Observability Observability `json:"observability"`
 	Cache         CacheNode     `json:"cache"`
@@ -83,6 +84,9 @@ func LoadNode(path string) (Node, error) {
 const MaxNodeConfig = 1 << 20
 
 func (n *Node) Validate() error {
+	if e := n.Guard.Validate(); e != nil {
+		return e
+	}
 	if e := n.Backup.Validate(); e != nil {
 		return e
 	}
@@ -164,6 +168,9 @@ func (n *Node) Validate() error {
 				}
 			}
 		}
+		if n.Guard.HelperSocket != "" && (overlaps(n.Guard.HelperSocket, s.Volume) || n.Guard.HelperUID == s.PeerUID) {
+			return errors.New("guard helper socket/UID must be separate from game containers")
+		}
 		ids[s.ID] = true
 		a := net.JoinHostPort(s.Allocation.IP, strconv.Itoa(s.Allocation.Port))
 		if allocations[a] {
@@ -179,6 +186,16 @@ func (n *Node) Validate() error {
 			if overlaps(s.Volume, other.Volume) {
 				return errors.New("registered volumes overlap")
 			}
+		}
+	}
+	for id := range n.Guard.Policies {
+		if !ids[id] {
+			return errors.New("guard policy references unregistered server")
+		}
+	}
+	for id := range n.Guard.Allocations {
+		if !ids[id] {
+			return errors.New("guard allocation references unregistered server")
 		}
 	}
 	return n.validateStores()

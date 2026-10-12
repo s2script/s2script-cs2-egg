@@ -22,6 +22,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/cache"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
+	"github.com/s2script/s2script-cs2-egg/internal/guard"
 	"github.com/s2script/s2script-cs2-egg/internal/node"
 	"github.com/s2script/s2script-cs2-egg/internal/nodetypes"
 	"github.com/s2script/s2script-cs2-egg/internal/observability"
@@ -40,6 +41,9 @@ func run(args []string, out, errs io.Writer) int {
 		return 2
 	}
 	command := args[0]
+	if strings.HasPrefix(command, "guard-") && command != "guard-helper-run" && command != "guard-helper-preview" {
+		return guardCLI(command, args[1:], out, errs)
+	}
 	if strings.HasPrefix(command, "backup-") {
 		return backupCLI(command, args[1:], out, errs)
 	}
@@ -61,6 +65,29 @@ func run(args []string, out, errs io.Writer) int {
 	directory := flags.String("directory", "", "install staging directory")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 {
 		return 2
+	}
+	if command == "guard-helper-run" || command == "guard-helper-preview" {
+		c, e := guard.LoadHelperConfig(*path)
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		if command == "guard-helper-preview" {
+			rules, e := c.Preview()
+			if e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+			fmt.Fprint(out, rules)
+			return 0
+		}
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		if e = guard.RunHelper(ctx, c); e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		return 0
 	}
 	if command == "helper-run" {
 		cfg, e := shared.LoadHelperConfig(*path)
@@ -230,6 +257,13 @@ func run(args []string, out, errs io.Writer) int {
 		fmt.Fprintln(out, "operator must provision systemd supplementary groups and ReadWritePaths for egg directories; doctor does not change permissions or acquire game locks")
 		return 0
 	case "run":
+		if cfg.Guard.Enabled {
+			m := &guard.Module{Root: filepath.Join(cfg.StateDir, "guard"), Config: cfg.Guard, Secrets: redaction.Secrets(cfg.Webhook.URL)}
+			if e = core.AddModule(m, []string{protocol.CapGuardAdmin, nodetypes.GrantOperationalEvents}); e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+		}
 		if cfg.Backup.Enabled {
 			m := &backup.Module{Root: filepath.Join(cfg.StateDir, "backup"), Config: cfg.Backup, Secrets: redaction.Secrets(cfg.Webhook.URL)}
 			if e = core.AddModule(m, []string{protocol.CapBackupAdmin, nodetypes.GrantOperationalEvents}); e != nil {
@@ -356,6 +390,15 @@ func install(dir string) error {
 	if closeErr := unit.Close(); e == nil {
 		e = closeErr
 	}
+	if e != nil {
+		return e
+	}
+	guardUnit, e := os.OpenFile(filepath.Join(abs, "s2node-guard.service"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if e != nil {
+		return e
+	}
+	_, e = guardUnit.Write(deploy.GuardUnit)
+	e = errors.Join(e, guardUnit.Close())
 	if e != nil {
 		return e
 	}

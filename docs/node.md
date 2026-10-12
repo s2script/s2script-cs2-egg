@@ -75,3 +75,7 @@ Tests use temporary Unix sockets, local files, fake game launchers and an in-pro
 ## Operational visibility
 
 Opt-in [logging and crash capture](logging.md), [private metrics](metrics.md), and [sealed cleanup](cleanup.md) use the canonical private admin/helper interfaces. Binary dumps remain sensitive explicit local exports. Queue format 2 requires explicit offline migration for existing format-1 installations.
+
+## Optional guard
+
+See [guard setup and administration](guard.md) for observation, typed kicks, and the separate opt-in nftables helper. Ordinary node service privileges do not change.

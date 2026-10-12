@@ -18,6 +18,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
+	"github.com/s2script/s2script-cs2-egg/internal/guard"
 	"github.com/s2script/s2script-cs2-egg/internal/nodeclient"
 	"github.com/s2script/s2script-cs2-egg/internal/observability"
 	"github.com/s2script/s2script-cs2-egg/internal/plugins"
@@ -97,6 +98,9 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 		}()
 		var sink events.Sink = dispatcher
 		options := runtime.Options{}
+		if server.Guard.Enabled {
+			options.ConsoleGuard = guard.NewLocal(server.Guard)
+		}
 		connectCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 		client, connectErr := nodeclient.Connect(connectCtx, filepath.Join(server.Root, "egg/s2node.sock"))
 		cancel()

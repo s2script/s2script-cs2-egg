@@ -21,6 +21,7 @@ import (
 
 // Server is schema version 1. Root comes only from the caller, never from JSON/env.
 type Server struct {
+	Guard         GuardPolicy    `json:"guard"`
 	Observability Observability  `json:"observability"`
 	Workshop      WorkshopClient `json:"workshop"`
 	Updates       ServerUpdates  `json:"updates"`
@@ -332,6 +333,12 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 	s.Launch.ExtraArgs, err = parseArgs(s.Launch.CustomParams)
 	if err != nil {
 		return fail(fmt.Errorf("CUSTOM_PARAMS: %w", err))
+	}
+	if e := s.Guard.Validate(); e != nil {
+		return fail(e)
+	}
+	if s.Guard.Action == "block" {
+		return fail(errors.New("standalone guard supports log/kick; configure host block policy on the node"))
 	}
 	if e := s.Observability.Validate(); e != nil {
 		return fail(e)

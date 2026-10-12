@@ -9,3 +9,6 @@ var Unit []byte
 
 //go:embed s2node-helper@.service
 var HelperUnit []byte
+
+//go:embed s2node-guard.service
+var GuardUnit []byte

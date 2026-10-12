@@ -33,7 +33,7 @@ func inputReader(in io.Reader) (io.Reader, func(), error) {
 		return nil, nil, errors.New("console input requires a file, finite standard reader, or owned io.ReadCloser")
 	}
 }
-func forwardInput(in io.Reader, out *os.File, stopping chan<- string, done <-chan struct{}, finished chan<- struct{}, guards ...func(string) (bool, string)) {
+func forwardInput(in io.Reader, out io.Writer, stopping chan<- string, done <-chan struct{}, finished chan<- struct{}, guards ...func(string) (bool, string)) {
 	defer close(finished)
 	if in == nil {
 		return
@@ -77,6 +77,7 @@ type consoleWriter struct {
 	redact   func(string) string
 	exclude  []string
 	stream   string
+	observe  func(string)
 	pending  []byte
 	overflow bool
 }
@@ -117,6 +118,9 @@ func (w *consoleWriter) flushLocked() {
 	line = w.redact(line)
 	w.pending = nil
 	w.overflow = false
+	if w.observe != nil {
+		w.observe(line)
+	}
 	w.emit("server.console", "", map[string]string{"stream": w.stream, "line": line})
 	for _, pattern := range w.exclude {
 		if strings.Contains(line, pattern) {

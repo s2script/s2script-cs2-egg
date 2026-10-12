@@ -52,5 +52,12 @@
     "schedule": false,
     "interval_seconds": 86400,
     "mode": "consistent"
+  },
+  "guard": {
+    "enabled": false,
+    "helper_socket": "",
+    "helper_uid": 2002,
+    "policies": {},
+    "allocations": {}
   }
 }

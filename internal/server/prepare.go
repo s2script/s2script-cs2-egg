@@ -30,6 +30,7 @@ type WorkshopProvider interface {
 }
 
 type Options struct {
+	ConsoleGuard     ConsoleGuard
 	ArtifactFetcher  artifact.SelectedFetcher
 	WorkshopProvider WorkshopProvider
 	GameProvider     GameProvider

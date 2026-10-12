@@ -31,6 +31,7 @@ import (
 
 type emitFunc func(string, string, map[string]string)
 type runOptions struct {
+	consoleGuard    ConsoleGuard
 	latest          func(context.Context, string) (string, error)
 	updatePoll      time.Duration
 	control         ControlProvider
@@ -79,7 +80,7 @@ func homeEnv(root string) []string {
 func Run(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.Reader, stdout, stderr io.Writer, options Options) (int, error) {
 	o := runOptions{prepare: func(ctx context.Context, cfg config.Server, emit emitFunc) (map[string]string, error) {
 		return prepareRuntimeOptions(ctx, cfg, emit, options)
-	}, control: options.ControlProvider, poll: time.Duration(cfg.Readiness.PollIntervalSeconds) * time.Second, timeout: time.Duration(cfg.Readiness.TimeoutSeconds) * time.Second, shutdown: 10 * time.Second}
+	}, consoleGuard: options.ConsoleGuard, control: options.ControlProvider, poll: time.Duration(cfg.Readiness.PollIntervalSeconds) * time.Second, timeout: time.Duration(cfg.Readiness.TimeoutSeconds) * time.Second, shutdown: 10 * time.Second}
 	if cfg.Updates.Enabled {
 		return runSupervisor(ctx, cfg, sink, stdin, stdout, stderr, o, options.GameProvider)
 	}
@@ -228,9 +229,12 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 	defer inRead.Close()
 	defer inWrite.Close()
 	cmd.Stdin = inRead
+	commandIn := &commandWriter{f: inWrite}
+	guardLoop := newConsoleGuard(ctx, o.consoleGuard, identity, runID, commandIn, emit)
+	defer guardLoop.close()
 	var outputMu sync.Mutex
-	out := &consoleWriter{mu: &outputMu, out: stdout, emit: emit, redact: redact, stream: "stdout", exclude: cfg.Observability.DisplayExclude}
-	errs := &consoleWriter{mu: &outputMu, out: stderr, emit: emit, redact: redact, stream: "stderr", exclude: cfg.Observability.DisplayExclude}
+	out := &consoleWriter{mu: &outputMu, out: stdout, emit: emit, redact: redact, stream: "stdout", exclude: cfg.Observability.DisplayExclude, observe: guardLoop.observe}
+	errs := &consoleWriter{mu: &outputMu, out: stderr, emit: emit, redact: redact, stream: "stderr", exclude: cfg.Observability.DisplayExclude, observe: guardLoop.observe}
 	cmd.Stdout = out
 	cmd.Stderr = errs
 	if e = cmd.Start(); e != nil {
@@ -243,7 +247,7 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 	defer cancel()
 	stopCommands := make(chan string, 1)
 	inputDone := make(chan struct{})
-	go forwardInput(input, inWrite, stopCommands, life.Done(), inputDone, control.Handle)
+	go forwardInput(input, commandIn, stopCommands, life.Done(), inputDone, control.Handle)
 	defer func() {
 		cancel()
 		closeInput()
@@ -395,7 +399,7 @@ loop:
 				}()
 			}
 			if o.updates != nil {
-				o.updates.observe(currentStatus(), inWrite)
+				o.updates.observe(currentStatus(), commandIn)
 				state.update(func(s *Status) { s.UpdatePending = o.updates.pendingBuild() })
 			}
 			poll.Reset(o.poll)
