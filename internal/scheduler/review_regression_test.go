@@ -296,27 +296,46 @@ func TestWarningReceiptSurvivesEligibilityReset(t *testing.T) {
 }
 
 func TestStaleWarningDefersWithoutResettingCountdown(t *testing.T) {
-	e, w, s, n := jobFixture(t)
-	defer e.Close()
-	warnings := 0
-	e.o.Power = &boundaryPower{fakePower: w, warningHook: func() { warnings++; s.SampleAt = n.Add(-time.Hour) }}
-	j, err := e.Schedule(context.Background(), "srv", Target{Generation: "0123456789abcdef0123456789abcdef", Build: "200"}, "", Policy{Mode: "immediate", MaximumDelay: time.Hour, WarningOffsets: []time.Duration{0}}, *s, n)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = e.Step(context.Background(), j.ID, n); err != nil {
-		t.Fatal(err)
-	}
-	if w.restarts != 0 || e.Jobs()[0].ExecuteAt.IsZero() {
-		t.Fatal("stale evidence dispatched or reset countdown", e.Jobs())
-	}
-	s.SampleAt = n
-	s.ReceivedAt = n
-	if err = e.Step(context.Background(), j.ID, n); err != nil {
-		t.Fatal(err)
-	}
-	if w.restarts != 1 || warnings != 1 {
-		t.Fatal("fresh retry changed warning receipt", w.restarts, warnings)
+	for _, countdown := range []time.Duration{0, time.Minute} {
+		t.Run(countdown.String(), func(t *testing.T) {
+			e, w, s, n := jobFixture(t)
+			defer e.Close()
+			warnings := 0
+			e.o.Power = &boundaryPower{fakePower: w, warningHook: func() { warnings++; s.SampleAt = n.Add(-time.Hour) }}
+			j, err := e.Schedule(context.Background(), "srv", Target{Generation: "0123456789abcdef0123456789abcdef", Build: "200"}, "", Policy{Mode: "immediate", MaximumDelay: time.Hour, WarningOffsets: []time.Duration{countdown}}, *s, n)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = e.Step(context.Background(), j.ID, n); err != nil {
+				t.Fatal(err)
+			}
+			waiting := e.Jobs()[0]
+			if w.restarts != 0 || waiting.ExecuteAt.IsZero() || waiting.Phase != "waiting" || waiting.Warnings[countdown.String()] != "dispatch_accepted" {
+				t.Fatal("stale evidence dispatched or lost countdown/receipt", waiting, warnings)
+			}
+			if countdown > 0 {
+				before := waiting.ExecuteAt.Add(-countdown / 2)
+				s.SampleAt = before
+				s.ReceivedAt = before
+				if err = e.Step(context.Background(), j.ID, before); err != nil {
+					t.Fatal(err)
+				}
+				if w.restarts != 0 || warnings != 1 || e.Jobs()[0].Phase != "waiting" || e.Jobs()[0].Warnings[countdown.String()] != "dispatch_accepted" || !e.Jobs()[0].ExecuteAt.Equal(waiting.ExecuteAt) {
+					t.Fatal("fresh evidence bypassed or reset countdown", e.Jobs(), warnings)
+				}
+			}
+			// Step includes time spent observing Wings in its persisted ExecuteAt.
+			// Reusing n here can move the test clock behind that instant when this
+			// retry is faster than the first call. Retry at the actual saved deadline.
+			s.SampleAt = waiting.ExecuteAt
+			s.ReceivedAt = waiting.ExecuteAt
+			if err = e.Step(context.Background(), j.ID, waiting.ExecuteAt); err != nil {
+				t.Fatal(err)
+			}
+			if w.restarts != 1 || warnings != 1 || e.Jobs()[0].Warnings[countdown.String()] != "dispatch_accepted" || !e.Jobs()[0].ExecuteAt.Equal(waiting.ExecuteAt) {
+				t.Fatal("fresh retry changed countdown or warning receipt", w.restarts, warnings, e.Jobs())
+			}
+		})
 	}
 }
 
