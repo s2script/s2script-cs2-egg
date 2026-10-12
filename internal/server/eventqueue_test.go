@@ -156,3 +156,37 @@ func TestSlowSinkConsoleFloodDoesNotDelayProcessShutdown(t *testing.T) {
 		}
 	}
 }
+
+type orderedGateSink struct {
+	started, release chan struct{}
+	once             sync.Once
+	seen             []string
+}
+
+func (s *orderedGateSink) Publish(ctx context.Context, e events.Event) error {
+	s.once.Do(func() { close(s.started) })
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	s.seen = append(s.seen, e.ID)
+	return nil
+}
+func TestLifecyclePriorityDeliversDownBeforeOlderStatus(t *testing.T) {
+	s := &orderedGateSink{started: make(chan struct{}), release: make(chan struct{})}
+	q := newEventQueue(s, io.Discard, time.Second, time.Second)
+	q.publish(events.Event{ID: "gate", Type: "server.console"})
+	select {
+	case <-s.started:
+	case <-time.After(time.Second):
+		t.Fatal("queue did not enter gated sink")
+	}
+	q.publish(events.Event{ID: "older-ready", RunID: "run", Type: "server.status", At: time.Now().Add(-time.Second)})
+	q.publish(events.Event{ID: "down", RunID: "run", Type: "server.down", At: time.Now()})
+	close(s.release)
+	q.finish()
+	if fmt.Sprint(s.seen) != "[gate down older-ready]" {
+		t.Fatalf("lifecycle/status backlog ordering: %v", s.seen)
+	}
+}

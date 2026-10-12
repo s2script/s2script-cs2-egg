@@ -63,6 +63,11 @@ func copyRuntimeFile(dest *os.Root, target string, source *os.Root, path string,
 	return dest.Rename(temp, target)
 }
 func prepareSteam(ctx context.Context, cfg config.Server, seed string) (string, error) {
+	for _, name := range []string{".s2shared.json", ".s2shared-pending.json"} {
+		if _, e := os.Lstat(filepath.Join(cfg.Root, name)); !errors.Is(e, os.ErrNotExist) {
+			return "", errors.New("shared install cannot use standalone SteamCMD; restore node/mount or run s2egg shared-standalone while stopped")
+		}
+	}
 	root, e := os.OpenRoot(cfg.Root)
 	if e != nil {
 		return "", e

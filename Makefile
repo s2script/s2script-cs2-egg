@@ -7,6 +7,7 @@ IMAGE ?= s2script-cs2-egg:dev
 build:
 	mkdir -p bin
 	$(GO) build -trimpath -o bin/s2egg ./cmd/s2egg
+	$(GO) build -trimpath -o bin/s2node ./cmd/s2node
 	$(GO) build -trimpath -o bin/egggen ./cmd/egggen
 
 test:

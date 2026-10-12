@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,9 +15,51 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/framework"
 	"github.com/s2script/s2script-cs2-egg/internal/plugins"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
+	"github.com/s2script/s2script-cs2-egg/internal/steam"
 )
 
+// GameProvider executes only inside the caller-owned runtime lease and artifact
+// lock, after Recover. It may reserve a host generation, then materialize locally
+// without recursively acquiring either lock. A claim or any error forbids Steam
+// fallback. The provider must retain crash-safe generation references (Task9).
+type GameProvider interface {
+	Prepare(context.Context, config.Server) (handled bool, err error)
+}
+type WorkshopProvider interface {
+	PrepareWorkshopLocked(context.Context, config.Server) error
+}
+
+type Options struct {
+	ArtifactFetcher  artifact.SelectedFetcher
+	WorkshopProvider WorkshopProvider
+	GameProvider     GameProvider
+	ControlProvider  ControlProvider
+}
+type preparationRunKey struct{}
+
+// PreparationRunID identifies the managed runtime; offline preparations use a separate run.
+func PreparationRunID(ctx context.Context) string {
+	id, _ := ctx.Value(preparationRunKey{}).(string)
+	return id
+}
+
+func withProvider(standalone func(context.Context, config.Server) (string, error), provider GameProvider) func(context.Context, config.Server) (string, error) {
+	return func(ctx context.Context, cfg config.Server) (string, error) {
+		if provider != nil {
+			handled, err := provider.Prepare(ctx, cfg)
+			if err != nil {
+				return "", err
+			}
+			if handled {
+				return steam.InstalledBuild(cfg.Root)
+			}
+		}
+		return standalone(ctx, cfg)
+	}
+}
+
 type prepOptions struct {
+	workshop WorkshopProvider
 	retained func(context.Context, config.Server, map[string]string) (framework.Selection, error)
 	steam    func(context.Context, config.Server) (string, error)
 	resolve  func(context.Context, config.Server, map[string]string) (framework.Selection, error)
@@ -30,21 +73,38 @@ func defaultPreparation() prepOptions {
 
 // Prepare takes the runtime lease before artifact recovery and holds it through
 // the complete stopped-server update. Run retains that lease through game exit.
-func Prepare(ctx context.Context, cfg config.Server) error {
+func Prepare(ctx context.Context, cfg config.Server, options Options) error {
 	release, e := runtimelease.Acquire(cfg.Root)
 	if e != nil {
 		return e
 	}
 	defer release()
-	_, e = prepareRuntime(ctx, cfg, func(kind, reason string, d map[string]string) {
+	ctx = context.WithValue(ctx, preparationRunKey{}, randomID())
+	_, e = prepareRuntimeOptions(ctx, cfg, func(kind, reason string, d map[string]string) {
 		if kind == "server.warning" {
 			fmt.Fprintln(os.Stderr, redactFor(cfg)("warning: "+reason+" "+d["message"]))
 		}
-	})
+	}, options)
 	return e
 }
 func prepareRuntime(ctx context.Context, cfg config.Server, emit emitFunc) (map[string]string, error) {
-	return prepareWith(ctx, cfg, emit, defaultPreparation())
+	return prepareRuntimeOptions(ctx, cfg, emit, Options{})
+}
+
+func prepareRuntimeOptions(ctx context.Context, cfg config.Server, emit emitFunc, options Options) (map[string]string, error) {
+	if cfg.Workshop.Enabled && options.WorkshopProvider == nil {
+		return nil, errors.New("workshop sharing enabled but node unavailable")
+	}
+	preparation := defaultPreparation()
+	if options.ArtifactFetcher != nil {
+		preparation.native = func(ctx context.Context, root string, s framework.Selection) (framework.Prepared, error) {
+			return framework.PrepareWithFetcher(ctx, root, s, options.ArtifactFetcher)
+		}
+		preparation.plugins = (plugins.Registry{Fetcher: options.ArtifactFetcher}).Prepare
+	}
+	preparation.workshop = options.WorkshopProvider
+	preparation.steam = withProvider(preparation.steam, options.GameProvider)
+	return prepareWith(ctx, cfg, emit, preparation)
 }
 
 // prepareWith requires the lifetime lease from its caller; only this function
@@ -77,7 +137,25 @@ func prepareWith(ctx context.Context, cfg config.Server, emit emitFunc, o prepOp
 	if e != nil {
 		return nil, e
 	}
+	if o.workshop != nil {
+		if e = o.workshop.PrepareWorkshopLocked(ctx, cfg); e != nil {
+			return nil, e
+		}
+	}
 	versions["steam_build"] = build
+	if f, err := os.Open(filepath.Join(cfg.Root, ".s2shared.json")); err == nil {
+		var local struct {
+			Generation struct {
+				ID string `json:"id"`
+			} `json:"generation"`
+		}
+		err = json.NewDecoder(io.LimitReader(f, 64<<20)).Decode(&local)
+		f.Close()
+		if err != nil {
+			return nil, errors.New("invalid shared generation status")
+		}
+		versions["shared_generation"] = local.Generation.ID
+	}
 	return versions, nil
 }
 

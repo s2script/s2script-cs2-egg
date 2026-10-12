@@ -1,0 +1,9 @@
+{
+  "volume": "/srv/s2node/volumes/SERVER_ID",
+  "shared_root": "/srv/s2node/shared",
+  "socket": "/run/s2node-helper-SERVER_ID/helper.sock",
+  "node_uid": 991,
+  "runtime_uid": 1000,
+  "access_gid": 1000,
+  "overrides": []
+}

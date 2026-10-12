@@ -93,17 +93,18 @@ func (d *Dispatcher) payload(e events.Event) []byte {
 	}{Parse: []string{}}})
 	return b
 }
-func (d *Dispatcher) deliver(e events.Event) bool {
+func (d *Dispatcher) deliver(e events.Event) bool { return d.deliverContext(d.ctx, e) }
+func (d *Dispatcher) deliverContext(parent context.Context, e events.Event) bool {
 	u, _ := url.Parse(d.cfg.URL)
 	q := u.Query()
 	q.Set("wait", "true")
 	u.RawQuery = q.Encode()
 	body := d.payload(e)
 	for attempt := 0; attempt <= d.cfg.MaxRetries; attempt++ {
-		if d.ctx.Err() != nil {
+		if parent.Err() != nil {
 			return false
 		}
-		ctx, cancel := context.WithTimeout(d.ctx, d.cfg.AttemptTimeout)
+		ctx, cancel := context.WithTimeout(parent, d.cfg.AttemptTimeout)
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
 		if err != nil {
 			cancel()
@@ -148,7 +149,7 @@ func (d *Dispatcher) deliver(e events.Event) bool {
 		timer := time.NewTimer(delay)
 		select {
 		case <-timer.C:
-		case <-d.ctx.Done():
+		case <-parent.Done():
 			timer.Stop()
 			return false
 		}

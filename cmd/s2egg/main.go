@@ -15,9 +15,15 @@ import (
 	"time"
 
 	"github.com/s2script/s2script-cs2-egg/internal/alerts"
+	"github.com/s2script/s2script-cs2-egg/internal/artifact"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
+	"github.com/s2script/s2script-cs2-egg/internal/events"
+	"github.com/s2script/s2script-cs2-egg/internal/nodeclient"
 	"github.com/s2script/s2script-cs2-egg/internal/plugins"
+	"github.com/s2script/s2script-cs2-egg/internal/protocol"
+	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
 	runtime "github.com/s2script/s2script-cs2-egg/internal/server"
+	"github.com/s2script/s2script-cs2-egg/internal/shared"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.LookupEnv, os.Stdout, os.Stderr)) }
@@ -40,7 +46,7 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 			}
 			return runtime.ReconcileLocked(ctx, cfg, req, errs)
 		})
-	case "run", "prepare", "status":
+	case "run", "prepare", "status", "shared-standalone":
 		command = args[0]
 		args = args[1:]
 	case "config":
@@ -88,17 +94,71 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 				fmt.Fprintf(errs, "webhook delivery: failed=%d dropped=%d\n", stats.Failed, stats.Dropped)
 			}
 		}()
-		code, e := runtime.Run(context.Background(), server, dispatcher, os.Stdin, out, errs)
+		var sink events.Sink = dispatcher
+		options := runtime.Options{}
+		connectCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		client, connectErr := nodeclient.Connect(connectCtx, filepath.Join(server.Root, "egg/s2node.sock"))
+		cancel()
+		if connectErr == nil {
+			defer client.Close()
+			if client.ServerID() != "" {
+				server.Identity = client.ServerID()
+			}
+			sink = client.Route(dispatcher)
+			options.GameProvider = client
+			options.WorkshopProvider = client
+			if client.Has(protocol.CapCache) {
+				options.ArtifactFetcher = client
+			}
+			options.ControlProvider = client
+		}
+		code, e := runtime.Run(context.Background(), server, sink, os.Stdin, out, errs, options)
 		if e != nil {
 			fmt.Fprintln(errs, "server error:", e)
 		}
 		return code
+	case "shared-standalone":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		release, e := runtimelease.Acquire(server.Root)
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		defer release()
+		unlock, e := artifact.Acquire(server.Root)
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		defer unlock()
+		if e = artifact.Recover(server.Root); e == nil {
+			e = shared.StandaloneLocked(ctx, server.Root)
+		}
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		fmt.Fprintln(out, "distinct writable standalone install ready; node references remain retained until stopped administrative reconciliation")
 	case "prepare":
 		// Keep the command alive to cancel and reap SteamCMD before preparation
 		// releases its runtime/artifact locks.
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		if e := runtime.Prepare(ctx, server); e != nil {
+		options := runtime.Options{}
+		connectCtx, cancel := context.WithTimeout(ctx, time.Second)
+		client, connectErr := nodeclient.Connect(connectCtx, filepath.Join(server.Root, "egg/s2node.sock"))
+		cancel()
+		if connectErr == nil {
+			defer client.Close()
+			options.GameProvider = client
+			options.WorkshopProvider = client
+			if client.Has(protocol.CapCache) {
+				options.ArtifactFetcher = client
+			}
+			options.ControlProvider = client
+		}
+		if e := runtime.Prepare(ctx, server, options); e != nil {
 			fmt.Fprintln(errs, "preparation error:", e)
 			return 1
 		}

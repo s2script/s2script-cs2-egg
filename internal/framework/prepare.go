@@ -21,6 +21,7 @@ import (
 
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
 	"github.com/s2script/s2script-cs2-egg/internal/catalog"
+	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 )
 
 const downloadLimit int64 = 256 << 20
@@ -193,7 +194,10 @@ func loadState(root string) (frameworkState, error) {
 // Prepare downloads/checks/extracts the selected generation, returning changes
 // without applying them. Bundled plugin placement belongs to the plugin caller.
 // The caller must keep the artifact lock held and combine all changes once.
-func Prepare(ctx context.Context, root string, s Selection) (prepared Prepared, err error) {
+func Prepare(ctx context.Context, root string, s Selection) (Prepared, error) {
+	return PrepareWithFetcher(ctx, root, s, nil)
+}
+func PrepareWithFetcher(ctx context.Context, root string, s Selection, fetcher artifact.SelectedFetcher) (prepared Prepared, err error) {
 	if err = ctx.Err(); err != nil {
 		return prepared, err
 	}
@@ -245,6 +249,15 @@ func Prepare(ctx context.Context, root string, s Selection) (prepared Prepared, 
 	cacheChanges := []artifact.Change{}
 	extract := func(name string, r Release) (string, error) {
 		dest := filepath.Join(stage, name+".archive")
+		if validator, ok := fetcher.(artifact.SelectedValidator); ok {
+			source := name
+			if name == "hud" {
+				source = "mam"
+			}
+			if e := validator.ValidateArtifact(ctx, protocol.ArtifactSelection{Source: source, Version: r.Version, SHA256: r.SHA256, SourceRevision: r.SourceRevision, Integrity: r.Integrity}); e != nil {
+				return "", e
+			}
+		}
 		cached, e := readPinned(live, cachePath(r), downloadLimit)
 		if e == nil {
 			if sum(cached) != r.SHA256 {
@@ -260,7 +273,16 @@ func Prepare(ctx context.Context, root string, s Selection) (prepared Prepared, 
 			if client.CheckRedirect == nil {
 				c.CheckRedirect = nil
 			}
-			if e = artifact.Fetch(ctx, c, r.URL, r.SHA256, dest, downloadLimit); e != nil {
+			if fetcher != nil {
+				source := name
+				if name == "hud" {
+					source = "mam"
+				}
+				e = fetcher.FetchArtifact(ctx, protocol.ArtifactSelection{Source: source, Version: r.Version, SHA256: r.SHA256, SourceRevision: r.SourceRevision, Integrity: r.Integrity}, dest)
+			} else {
+				e = artifact.Fetch(ctx, c, r.URL, r.SHA256, dest, downloadLimit)
+			}
+			if e != nil {
 				if ctx.Err() != nil {
 					return "", ctx.Err()
 				}

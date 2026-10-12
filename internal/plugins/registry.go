@@ -17,9 +17,11 @@ import (
 	"time"
 
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
+	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 )
 
 type Registry struct {
+	Fetcher artifact.SelectedFetcher
 	BaseURL string
 	Client  *http.Client
 }
@@ -250,6 +252,9 @@ func validHash(s string) bool {
 func (r Registry) Fetch(ctx context.Context, entry PlanEntry, dest string) error {
 	if e := r.trust(entry.URL); e != nil {
 		return e
+	}
+	if r.Fetcher != nil {
+		return r.Fetcher.FetchArtifact(ctx, protocol.ArtifactSelection{Source: "registry", Name: entry.Name, Version: entry.Version, SHA256: entry.SHA256}, dest)
 	}
 	c := r.client()
 	transport := c.Transport
