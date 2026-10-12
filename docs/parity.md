@@ -18,9 +18,11 @@ This file records the standalone source-build milestone. The approved design rem
 | Disabled plugin updates and persistent placement/config/data | Implemented in preparation and direct CLI moves; TLS/ZIP/transaction tests cover disabled updates, shared/exclusive dependencies, immutable pins, local preservation and config continuity |
 | HUD support and MultiAddonManager setup | Preparation library enforces minimum installed CS2 build, stages compatible helper and merges addon settings; live server/client rendering not tested |
 | Lifecycle webhook events and delivery | Raw runtime events and bounded filtered Discord dispatcher/CLI flushing implemented; complete lifecycle HTTP fixtures pass; no live webhook contacted |
-| Optional node daemon and narrow local protocol | Planned; no Docker socket or Wings admin credential in the container |
-| Shared game generations, cache, coordinated update/restart | Planned |
-| Backups/restores, workshop management, guard, scheduling | Planned |
+| Optional node daemon and narrow local protocol | Implemented with private peer-credential Unix sockets and durable ownership/outbox; no container Docker socket or Wings admin credential |
+| Shared game generations, cache, coordinated update/restart | Implemented in Tasks9–11 with fixture coverage; live acceptance remains pending |
+| Workshop and restart scheduling | Implemented with UID helper/lease and protocol fixtures; live acceptance remains pending |
+| Logs, text crash bundles, sealed cleanup, private metrics | Implemented with synthetic crash/redaction, archive/finalization, private helper and bounded-label fixtures; binary dumps opt-in sensitive local export only |
+| Backups/restores, guard and self-update | Planned; canonical host operational route and observer interfaces available |
 | Container targets and CI | Source-built non-root runtime/debug targets, pinned bases/actions, nonpublishing PR image builds and prerequisite smoke checks implemented; local Docker unavailable; remote CI outcomes require observation |
 | Public images/releases | Not published; build locally and retain source/image IDs; redistribution notices included |
 | Live CS2/Wings smoke/acceptance tests | Not run; runtime code is tested with fixtures; image/infrastructure and native acceptance are pending |

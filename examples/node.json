@@ -37,5 +37,14 @@
     "root": "/srv/s2node/shared",
     "steamcmd": "/opt/s2node-steamcmd/steamcmd.sh",
     "reserve_bytes": 68719476736
+  },
+  "observability": {
+    "enabled": false,
+    "privateMetrics": "",
+    "log_bytes": 16777216,
+    "log_files": 6,
+    "tail_bytes": 262144,
+    "crash_bytes": 2097152,
+    "crash_files": 20
   }
 }

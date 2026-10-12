@@ -35,3 +35,7 @@ When the node owns delivery, it retains the container's canonical event ID, Serv
 ## Optional node delivery
 
 The [node core](node.md#durable-ownership-and-delivery) negotiates and durably retains one webhook owner per run. `alerts.Dispatcher.Deliver` supplies explicit synchronous transport outcomes for the durable worker; `Publish` retains its standalone asynchronous semantics. Lost node contact never activates a second sender after ownership has been claimed.
+
+## Host operational events
+
+Optional selectors now include `crash.bundle`, `cleanup`, `backup`, `restore`, `guard` and `node.update`. Task12 implements the first two plus the shared producer route; later modules implement their own outcomes. No selector enables an absent module. Host schema-2 envelopes identify node, bound producer and stable action; they never impersonate a runtime run. Terminal inputs and timestamps are persisted before publish, and exact retry conflicts are rejected. The separate host quota is 256 pending/2048 hot records with the same bounded retry worker and exact cold archives. Filtered traffic consumes no durable webhook record. Content is redacted and bounded; no binary dump is attached or uploaded. See [event provenance](logging.md) and [retention](cleanup.md).

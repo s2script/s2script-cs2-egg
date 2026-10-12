@@ -15,6 +15,7 @@ import (
 
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
 	node "github.com/s2script/s2script-cs2-egg/internal/nodetypes"
+	"github.com/s2script/s2script-cs2-egg/internal/privateops"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
 	"github.com/s2script/s2script-cs2-egg/internal/volumehelper"
@@ -25,17 +26,18 @@ import (
 // RuntimeUID with AccessGID as a supplementary group, without any capabilities.
 // The socket and configuration must be outside all container mounts.
 type HelperConfig struct {
-	WorkshopRoot  string   `json:"workshop_root,omitempty"`
-	WorkshopMode  string   `json:"workshop_mode,omitempty"`
-	WorkshopMount string   `json:"workshop_mount,omitempty"`
-	WorkshopItems []string `json:"workshop_items,omitempty"`
-	Volume        string   `json:"volume"`
-	SharedRoot    string   `json:"shared_root"`
-	Socket        string   `json:"socket"`
-	NodeUID       uint32   `json:"node_uid"`
-	RuntimeUID    uint32   `json:"runtime_uid"`
-	AccessGID     int      `json:"access_gid"`
-	Overrides     []string `json:"overrides"`
+	Operations    *privateops.Policy `json:"operations,omitempty"`
+	WorkshopRoot  string             `json:"workshop_root,omitempty"`
+	WorkshopMode  string             `json:"workshop_mode,omitempty"`
+	WorkshopMount string             `json:"workshop_mount,omitempty"`
+	WorkshopItems []string           `json:"workshop_items,omitempty"`
+	Volume        string             `json:"volume"`
+	SharedRoot    string             `json:"shared_root"`
+	Socket        string             `json:"socket"`
+	NodeUID       uint32             `json:"node_uid"`
+	RuntimeUID    uint32             `json:"runtime_uid"`
+	AccessGID     int                `json:"access_gid"`
+	Overrides     []string           `json:"overrides"`
 }
 
 func LoadHelperConfig(path string) (HelperConfig, error) {
@@ -69,7 +71,7 @@ func LoadHelperConfig(path string) (HelperConfig, error) {
 	return c, nil
 }
 func (c HelperConfig) validate() error {
-	if c.Volume == "" || c.Socket == "" || c.SharedRoot == "" && c.WorkshopRoot == "" {
+	if c.Volume == "" || c.Socket == "" || c.SharedRoot == "" && c.WorkshopRoot == "" && c.Operations == nil {
 		return errors.New("fixed helper volume/socket/store required")
 	}
 	for _, p := range []string{c.Volume, c.SharedRoot, c.WorkshopRoot, c.Socket} {
@@ -86,6 +88,23 @@ func (c HelperConfig) validate() error {
 	overlap := func(a, b string) bool { return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/") }
 	if c.SharedRoot != "" && (overlap(c.Volume, c.SharedRoot) || overlap(c.Socket, c.SharedRoot)) || overlap(c.Socket, c.Volume) || c.WorkshopRoot != "" && (overlap(c.Volume, c.WorkshopRoot) || overlap(c.Socket, c.WorkshopRoot)) {
 		return errors.New("helper socket/store must be outside the private volume")
+	}
+	if c.Operations != nil {
+		if e := c.Operations.Validate(); e != nil {
+			return e
+		}
+		if overlap(c.Operations.Root, c.Volume) || overlap(c.Operations.Root, c.Socket) || c.SharedRoot != "" && overlap(c.Operations.Root, c.SharedRoot) || c.WorkshopRoot != "" && overlap(c.Operations.Root, c.WorkshopRoot) {
+			return errors.New("operations root must be separate from volume/socket/stores")
+		}
+		d, e := artifact.OpenDirectory(c.Operations.Root)
+		if e != nil {
+			return e
+		}
+		i, e := d.Stat()
+		d.Close()
+		if e != nil || i.Sys().(*syscall.Stat_t).Uid != c.RuntimeUID || i.Mode().Perm()&0077 != 0 {
+			return errors.New("operations root must be private and runtime-UID-owned")
+		}
 	}
 	for _, p := range []string{c.Volume, c.SharedRoot, c.WorkshopRoot} {
 		if p == "" {
@@ -223,6 +242,12 @@ func helperSession(ctx context.Context, conn net.Conn, c HelperConfig) error {
 	first, e := protocol.Read(conn)
 	if e != nil {
 		return e
+	}
+	if first.Version == protocol.Version && first.ID == "operations" && first.Type == "begin" {
+		if c.Operations == nil {
+			return (volumehelper.Session{Conn: conn, Family: "operations"}).Write("result", privateops.Reply{Error: "private operations not configured"})
+		}
+		return privateops.Serve(ctx, conn, c.Volume, *c.Operations, first)
 	}
 	if first.Version == protocol.Version && first.ID == "workshop" && first.Type == "begin-workshop" {
 		if c.WorkshopRoot == "" {

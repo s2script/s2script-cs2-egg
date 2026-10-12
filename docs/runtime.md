@@ -66,3 +66,7 @@ A sink **must honor context cancellation**; Go cannot force an arbitrary noncomp
 | `server.plugin_check` | Bounded name/status/available-version outcome, without raw metadata |
 
 The default webhook selection now uses `server.start_failed`. Legacy `startup.failure` remains accepted configuration; the dispatcher normalizes it to `server.start_failed` and deduplicates selection so one event is not delivered twice. Standalone delivery cannot be guaranteed after SIGKILL, host failure or power loss. The packaged source milestone includes webhook delivery and both runtime/debug build targets; actual image and native acceptance evidence remains separate.
+
+## Text observability
+
+The optional `observability` server JSON object enables sealed local logs and crash bundles. Raw redacted console facts precede literal display filters; split-write credentials are handled at the bounded console/redaction boundary. Local/node crash tails are labeled bounded best effort because terminal lifecycle delivery may overtake console backlog. Defaults, commands and sensitive dump separation are documented in [logging](logging.md).

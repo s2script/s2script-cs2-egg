@@ -40,17 +40,18 @@ type SharedNode struct {
 	ReserveBytes uint64 `json:"reserve_bytes"`
 }
 type Node struct {
-	Cache         CacheNode    `json:"cache"`
-	Workshop      WorkshopNode `json:"workshop"`
-	Updates       NodeUpdates  `json:"updates"`
-	Shared        SharedNode   `json:"shared"`
-	SchemaVersion int          `json:"schema_version"`
-	ID            string       `json:"id"`
-	StateDir      string       `json:"state_dir"`
-	AdminSocket   string       `json:"admin_socket"`
-	Servers       []NodeServer `json:"servers"`
-	Limits        NodeLimits   `json:"limits"`
-	Webhook       Webhook      `json:"webhook"`
+	Observability Observability `json:"observability"`
+	Cache         CacheNode     `json:"cache"`
+	Workshop      WorkshopNode  `json:"workshop"`
+	Updates       NodeUpdates   `json:"updates"`
+	Shared        SharedNode    `json:"shared"`
+	SchemaVersion int           `json:"schema_version"`
+	ID            string        `json:"id"`
+	StateDir      string        `json:"state_dir"`
+	AdminSocket   string        `json:"admin_socket"`
+	Servers       []NodeServer  `json:"servers"`
+	Limits        NodeLimits    `json:"limits"`
+	Webhook       Webhook       `json:"webhook"`
 }
 
 // Format uses the existing Webhook JSON redactor even for nested settings.
@@ -81,6 +82,9 @@ func LoadNode(path string) (Node, error) {
 const MaxNodeConfig = 1 << 20
 
 func (n *Node) Validate() error {
+	if e := n.Observability.Validate(); e != nil {
+		return e
+	}
 	if n.SchemaVersion != 1 || !nodeID.MatchString(n.ID) {
 		return errors.New("invalid node schema or identity")
 	}

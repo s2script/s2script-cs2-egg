@@ -9,9 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/s2script/s2script-cs2-egg/internal/redaction"
 	"io"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -51,19 +51,10 @@ func randomID() string {
 	return hex.EncodeToString(b[:])
 }
 func redactFor(cfg config.Server) func(string) string {
-	secrets := []string{cfg.Steam.GSLT, cfg.Webhook.URL}
-	if u, e := url.Parse(cfg.Webhook.URL); e == nil && u.Path != "" {
-		secrets = append(secrets, filepath.Base(u.Path))
-	}
-	return func(s string) string {
-		for _, secret := range secrets {
-			if secret != "" {
-				s = strings.ReplaceAll(s, secret, "[REDACTED]")
-			}
-		}
-		return s
-	}
+	secrets := redaction.Secrets(cfg.Steam.GSLT, cfg.Webhook.URL)
+	return func(s string) string { return redaction.Redact(s, secrets) }
 }
+
 func launchArgs(c config.Server) []string {
 	a := []string{"-dedicated", "-console", "-usercon", "-ip", c.Launch.IP, "-port", itoa(c.Launch.Port), "-maxplayers", itoa(c.Launch.MaxPlayers), "+game_type", itoa(c.Launch.GameType), "+game_mode", itoa(c.Launch.GameMode), "+map", c.Launch.Map}
 	a = append(a, c.Launch.ExtraArgs...)
@@ -238,8 +229,8 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 	defer inWrite.Close()
 	cmd.Stdin = inRead
 	var outputMu sync.Mutex
-	out := &consoleWriter{mu: &outputMu, out: stdout, emit: emit, redact: redact, stream: "stdout"}
-	errs := &consoleWriter{mu: &outputMu, out: stderr, emit: emit, redact: redact, stream: "stderr"}
+	out := &consoleWriter{mu: &outputMu, out: stdout, emit: emit, redact: redact, stream: "stdout", exclude: cfg.Observability.DisplayExclude}
+	errs := &consoleWriter{mu: &outputMu, out: stderr, emit: emit, redact: redact, stream: "stderr", exclude: cfg.Observability.DisplayExclude}
 	cmd.Stdout = out
 	cmd.Stderr = errs
 	if e = cmd.Start(); e != nil {

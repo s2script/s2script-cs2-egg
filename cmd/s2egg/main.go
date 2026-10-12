@@ -19,6 +19,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/nodeclient"
+	"github.com/s2script/s2script-cs2-egg/internal/observability"
 	"github.com/s2script/s2script-cs2-egg/internal/plugins"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
@@ -111,6 +112,15 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 				options.ArtifactFetcher = client
 			}
 			options.ControlProvider = client
+		}
+		if server.Observability.Enabled {
+			local, err := observability.NewLocal(server, sink)
+			if err != nil {
+				fmt.Fprintln(errs, "local observability unavailable")
+				return 1
+			}
+			defer local.Close()
+			sink = local
 		}
 		code, e := runtime.Run(context.Background(), server, sink, os.Stdin, out, errs, options)
 		if e != nil {

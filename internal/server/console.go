@@ -75,6 +75,7 @@ type consoleWriter struct {
 	out      io.Writer
 	emit     emitFunc
 	redact   func(string) string
+	exclude  []string
 	stream   string
 	pending  []byte
 	overflow bool
@@ -117,6 +118,11 @@ func (w *consoleWriter) flushLocked() {
 	w.pending = nil
 	w.overflow = false
 	w.emit("server.console", "", map[string]string{"stream": w.stream, "line": line})
+	for _, pattern := range w.exclude {
+		if strings.Contains(line, pattern) {
+			return
+		}
+	}
 	if w.out != nil {
 		io.WriteString(w.out, strings.ReplaceAll(line, "S2EGG_READY", "[reserved readiness marker]")+"\n")
 	}
