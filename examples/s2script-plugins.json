@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "plugins": {
+    "@s2script/basecommands": {
+      "source": "release",
+      "version": "*",
+      "enabled": false
+    },
+    "hello-world": {
+      "source": "registry",
+      "version": "1.2.3",
+      "enabled": false
+    }
+  }
+}
