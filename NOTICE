@@ -1,0 +1,25 @@
+SPDX-License-Identifier: GPL-3.0-or-later
+Copyright (C) 2026 S2Script CS2 Egg contributors
+
+Project code is licensed under the GNU General Public License, version 3
+or (at your option) any later version. See LICENSE for the complete text.
+
+CS2-Egg-Go by K4ryuu supplied the operational feature reference and its
+GPL-3.0-or-later licensing requirement. No upstream product module or source
+code is imported in this milestone.
+https://github.com/K4ryuu/CS2-Egg-Go
+
+S2Script's plugin identities/default placements were researched against
+s2script/s2script revision 86d1de3ba7366b08f7e8bb0db34ca2a1e84415d7.
+No S2Script implementation code is included in this milestone.
+https://github.com/s2script/s2script
+
+LICENSE is verbatim GPL-3.0-or-later license text from the local SPDX license
+collection at /usr/share/licenses/spdx/GPL-3.0-or-later.txt (Arch Linux
+licenses package 20240728-1). The license text is Copyright (C) 2007 Free
+Software Foundation, Inc.; verbatim copying and distribution are permitted.
+https://www.gnu.org/licenses/gpl-3.0.html
+
+Go 1.27.2 is a development tool and is not vendored into this repository.
+CS2, SteamCMD, Metamod, S2Script, and prospective downloaded artifacts retain
+their own licenses and are not redistributed by this source milestone.
