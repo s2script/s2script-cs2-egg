@@ -62,11 +62,11 @@ func (s *Store) List() (out []Manifest, err error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
 	return out, nil
 }
-func (s *Store) prune() error {
+func (s *Store) prune(preserve string) error {
 	if e := s.expirePlans(); e != nil {
 		return e
 	}
-	pins := map[string]bool{}
+	pins := map[string]bool{preserve: true}
 	entries, e := os.ReadDir(filepath.Join(s.policy.Root, "plans"))
 	if e != nil {
 		return e
@@ -104,7 +104,7 @@ func (s *Store) prune() error {
 		n -= m.ArchiveBytes
 	}
 	if count > s.policy.Retention.Count || n > s.policy.Retention.Bytes {
-		return errors.New("backup published; retention protected by restore plans")
+		return errors.New("backup published; retention protected by retained backups or restore plans")
 	}
 	return nil
 }

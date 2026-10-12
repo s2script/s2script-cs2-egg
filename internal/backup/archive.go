@@ -133,7 +133,7 @@ func (s *Store) Create(ctx context.Context, o Options) (Manifest, error) {
 	if e != nil {
 		return zero, e
 	}
-	if e = s.prune(); e != nil {
+	if e = s.prune(m.BackupID); e != nil {
 		return m, e
 	}
 	return m, nil
@@ -237,6 +237,9 @@ func (s *Store) seal(ctx context.Context, id, mode string, files []selected, abs
 	}
 	m.ArchiveSHA256 = hex.EncodeToString(h.Sum(nil))
 	m.ArchiveBytes = w.n
+	if strings.HasPrefix(id, "backup-") && m.ArchiveBytes > s.policy.Retention.Bytes {
+		return m, errors.New("backup exceeds retention byte budget; previous backups retained")
+	}
 	if e = storeio.Save(stage, "manifest.json", m); e != nil {
 		return m, e
 	}

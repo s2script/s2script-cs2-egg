@@ -75,7 +75,7 @@ If interrupted, managed startup recovers the artifact journal before launching t
 | Node job history | 128 per server; active/uncertain/unpublished entries protected |
 | Saved previews | 16; 64 MiB aggregate; 24 hours |
 
-Configurable numeric policy bounds have finite limits of at most four times their defaults. Free-space checks budget archive/recovery/staging and transaction copies, combining reservations on the same filesystem. Streams enforce archive and disk bounds; independent disk consumers can still cause a clean failure. Retention runs only after publishing a new backup and respects preview pins. A failed creation never prunes prior backups to make space.
+Configurable numeric policy bounds have finite limits of at most four times their defaults. Free-space checks budget archive/recovery/staging and transaction copies, combining reservations on the same filesystem. Streams enforce archive and disk bounds; independent disk consumers can still cause a clean failure. An archive larger than the retention byte budget is rejected before publication, preserving all previous backups. Retention runs only after publishing a new backup, protects that backup regardless of timestamp order, and respects preview pins. A failed creation never prunes prior backups to make space. If protected backups prevent meeting the budget, creation returns an explicit retention error and keeps the published backup.
 
 Recovery is never removed by age or generic cleanup. While the managed server is stopped, explicitly release and reclaim a completed recovery copy:
 
