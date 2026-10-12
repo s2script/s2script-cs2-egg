@@ -75,7 +75,7 @@ func (c *Core) AddModule(m Module, grants []string) error {
 }
 func knownCapability(cap string) bool {
 	switch cap {
-	case protocol.CapOperations, protocol.CapEvents, protocol.CapStatus, protocol.CapPrepare, protocol.CapCache, protocol.CapWorkshop, protocol.CapRestart, protocol.CapUpdateControl, protocol.CapUpdateExecute, protocol.CapUpdateAdmin:
+	case protocol.CapBackupAdmin, protocol.CapOperations, protocol.CapEvents, protocol.CapStatus, protocol.CapPrepare, protocol.CapCache, protocol.CapWorkshop, protocol.CapRestart, protocol.CapUpdateControl, protocol.CapUpdateExecute, protocol.CapUpdateAdmin:
 		return true
 	}
 	return false

@@ -20,7 +20,7 @@ jobs:
           go-version: '1.27.2'
           cache: false # stdlib-only module has no go.sum
       - run: go test ./...
-      - name: Cross-UID shared and operations-only helpers (isolated ephemeral fixture only)
+      - name: Cross-UID shared, operations and backup helpers (isolated ephemeral fixture only)
         run: |
           CGO_ENABLED=0 go test -c -o /tmp/s2shared-permission.test ./internal/shared
           sudo env S2SHARED_PRIVILEGED_TEST=1 /tmp/s2shared-permission.test -test.run=^TestCrossUIDHelperFixture$ -test.v

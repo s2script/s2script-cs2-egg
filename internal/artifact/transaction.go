@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -23,19 +24,22 @@ const (
 // Change replaces a relative regular file from Source, or removes it. CreateOnly
 // leaves an existing regular file untouched. Source is a staged regular file.
 type Change struct {
-	Path       string
-	Source     string
-	Remove     bool
-	CreateOnly bool
+	Path             string
+	Source           string
+	Remove           bool
+	CreateOnly       bool
+	PreserveMetadata bool // private restore: retain permitted existing UID/GID/mode
 }
 type journalEntry struct {
-	Path   string `json:"path"`
-	HadOld bool   `json:"had_old"`
-	Remove bool   `json:"remove,omitempty"`
+	Path             string `json:"path"`
+	HadOld           bool   `json:"had_old"`
+	PreserveMetadata bool   `json:"preserve_metadata,omitempty"`
+	Remove           bool   `json:"remove,omitempty"`
 }
 type journal struct {
-	Version int            `json:"version"`
-	Entries []journalEntry `json:"entries"`
+	Version     int            `json:"version"`
+	Entries     []journalEntry `json:"entries"`
+	CreatedDirs []string       `json:"created_dirs,omitempty"`
 }
 
 func managedPath(p string) error {
@@ -132,11 +136,6 @@ func Apply(ctx context.Context, rootPath string, changes []Change) (err error) {
 			return errors.New("duplicate or conflicting change")
 		}
 		seen[c.Path] = true
-		for p := range seen {
-			if p != c.Path && (strings.HasPrefix(p, c.Path+"/") || strings.HasPrefix(c.Path, p+"/")) {
-				return errors.New("overlapping artifact paths")
-			}
-		}
 		old, e := existing(root, c.Path)
 		if e != nil {
 			return e
@@ -158,8 +157,52 @@ func Apply(ctx context.Context, rootPath string, changes []Change) (err error) {
 				return e
 			}
 		}
+		if c.PreserveMetadata {
+			if c.Remove {
+				return errors.New("private restoration is replace-only")
+			}
+			if old {
+				f, e := openFile(root, c.Path, syscall.O_RDONLY, 0)
+				if e != nil {
+					return e
+				}
+				i, e := f.Stat()
+				f.Close()
+				if e != nil {
+					return e
+				}
+				if e = permittedMetadata(i); e != nil {
+					return e
+				}
+			}
+			dirs, e := missingParents(root, c.Path)
+			if e != nil {
+				return e
+			}
+			for _, p := range dirs {
+				found := false
+				for _, old := range j.CreatedDirs {
+					if old == p {
+						found = true
+					}
+				}
+				if !found {
+					j.CreatedDirs = append(j.CreatedDirs, p)
+				}
+			}
+		}
 		selected = append(selected, c)
-		j.Entries = append(j.Entries, journalEntry{Path: c.Path, HadOld: old, Remove: c.Remove})
+		j.Entries = append(j.Entries, journalEntry{Path: c.Path, HadOld: old, Remove: c.Remove, PreserveMetadata: c.PreserveMetadata})
+	}
+	paths := make([]string, 0, len(seen))
+	for p := range seen {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for i := 1; i < len(paths); i++ {
+		if strings.HasPrefix(paths[i], paths[i-1]+"/") {
+			return errors.New("overlapping artifact paths")
+		}
 	}
 	if len(selected) == 0 {
 		return nil
@@ -184,7 +227,7 @@ func Apply(ctx context.Context, rootPath string, changes []Change) (err error) {
 			if e != nil {
 				return e
 			}
-			e = copyFile(root, f, fmt.Sprintf("%s/old/%d", transactionDir, i))
+			e = copyPrivate(root, f, fmt.Sprintf("%s/old/%d", transactionDir, i), c.PreserveMetadata)
 			e = errors.Join(e, f.Close())
 			if e != nil {
 				return e
@@ -205,6 +248,36 @@ func Apply(ctx context.Context, rootPath string, changes []Change) (err error) {
 			if e != nil {
 				return e
 			}
+			if c.PreserveMetadata {
+				n, e := openFile(root, fmt.Sprintf("%s/new/%d", transactionDir, i), syscall.O_RDWR, 0)
+				if e != nil {
+					return e
+				}
+				if j.Entries[i].HadOld {
+					old, e := openFile(root, c.Path, syscall.O_RDONLY, 0)
+					if e != nil {
+						n.Close()
+						return e
+					}
+					info, e := old.Stat()
+					old.Close()
+					if e != nil {
+						n.Close()
+						return e
+					}
+					e = setMetadata(n, info)
+					if e != nil {
+						n.Close()
+						return e
+					}
+				} else {
+					e = n.Chmod(0600)
+				}
+				e = errors.Join(e, n.Sync(), n.Close())
+				if e != nil {
+					return e
+				}
+			}
 		}
 	}
 	for _, p := range []string{"old", "new"} {
@@ -215,6 +288,11 @@ func Apply(ctx context.Context, rootPath string, changes []Change) (err error) {
 	}
 	if e = writeJournal(root, j); e != nil {
 		return e
+	}
+	for _, p := range j.CreatedDirs {
+		if e = makePrivateDir(root, p); e != nil {
+			return e
+		}
 	}
 	for i, c := range selected {
 		if e = ctx.Err(); e != nil {
@@ -324,7 +402,7 @@ func recoverRoot(root *os.File) error {
 				src.Close()
 				return e
 			}
-			e = copyFile(root, src, temp)
+			e = copyPrivate(root, src, temp, c.PreserveMetadata)
 			e = errors.Join(e, src.Close())
 			if e != nil {
 				return e
@@ -336,6 +414,11 @@ func recoverRoot(root *os.File) error {
 			if e = remove(root, c.Path); e != nil {
 				return e
 			}
+		}
+	}
+	for i := len(j.CreatedDirs) - 1; i >= 0; i-- {
+		if e = removePrivateDir(root, j.CreatedDirs[i]); e != nil {
+			return e
 		}
 	}
 	return cleanTransaction(root)

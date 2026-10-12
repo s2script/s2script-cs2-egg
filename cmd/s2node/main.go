@@ -18,6 +18,7 @@ import (
 
 	"github.com/s2script/s2script-cs2-egg/deploy"
 	"github.com/s2script/s2script-cs2-egg/internal/alerts"
+	"github.com/s2script/s2script-cs2-egg/internal/backup"
 	"github.com/s2script/s2script-cs2-egg/internal/cache"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
@@ -39,6 +40,9 @@ func run(args []string, out, errs io.Writer) int {
 		return 2
 	}
 	command := args[0]
+	if strings.HasPrefix(command, "backup-") {
+		return backupCLI(command, args[1:], out, errs)
+	}
 	if isOperationsCommand(command) {
 		return operationsCLI(command, args[1:], out, errs)
 	}
@@ -226,6 +230,13 @@ func run(args []string, out, errs io.Writer) int {
 		fmt.Fprintln(out, "operator must provision systemd supplementary groups and ReadWritePaths for egg directories; doctor does not change permissions or acquire game locks")
 		return 0
 	case "run":
+		if cfg.Backup.Enabled {
+			m := &backup.Module{Root: filepath.Join(cfg.StateDir, "backup"), Config: cfg.Backup, Secrets: redaction.Secrets(cfg.Webhook.URL)}
+			if e = core.AddModule(m, []string{protocol.CapBackupAdmin, nodetypes.GrantOperationalEvents}); e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+		}
 		if cfg.Observability.Enabled {
 			m := &observability.Module{Root: filepath.Join(cfg.StateDir, "observability"), Config: cfg.Observability, Secrets: redaction.Secrets(cfg.Webhook.URL)}
 			if e = core.AddModule(m, []string{protocol.CapOperations, nodetypes.GrantOperationalEvents}); e != nil {

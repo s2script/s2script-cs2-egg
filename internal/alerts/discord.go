@@ -68,6 +68,9 @@ func (d *Dispatcher) payload(e events.Event) []byte {
 	if e.Origin == "host" {
 		text = fmt.Sprintf("%s\nNode: %s\nProducer: %s\nAction: %s\nEvent: %s\nAt: %s\nReason: %s", e.Type, e.NodeID, e.Producer, e.ActionID, e.ID, e.At.UTC().Format(time.RFC3339), e.Reason)
 	}
+	if e.Origin == "host" && e.ServerID != "" {
+		text += "\nServer: " + e.ServerID
+	}
 	keys := make([]string, 0, len(e.Details))
 	for k := range e.Details {
 		keys = append(keys, k)

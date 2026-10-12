@@ -40,6 +40,7 @@ type SharedNode struct {
 	ReserveBytes uint64 `json:"reserve_bytes"`
 }
 type Node struct {
+	Backup        BackupNode    `json:"backup"`
 	Observability Observability `json:"observability"`
 	Cache         CacheNode     `json:"cache"`
 	Workshop      WorkshopNode  `json:"workshop"`
@@ -82,6 +83,9 @@ func LoadNode(path string) (Node, error) {
 const MaxNodeConfig = 1 << 20
 
 func (n *Node) Validate() error {
+	if e := n.Backup.Validate(); e != nil {
+		return e
+	}
 	if e := n.Observability.Validate(); e != nil {
 		return e
 	}

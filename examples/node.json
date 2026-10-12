@@ -46,5 +46,11 @@
     "tail_bytes": 262144,
     "crash_bytes": 2097152,
     "crash_files": 20
+  },
+  "backup": {
+    "enabled": false,
+    "schedule": false,
+    "interval_seconds": 86400,
+    "mode": "consistent"
   }
 }

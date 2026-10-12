@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
+	"github.com/s2script/s2script-cs2-egg/internal/backup"
 	node "github.com/s2script/s2script-cs2-egg/internal/nodetypes"
 	"github.com/s2script/s2script-cs2-egg/internal/privateops"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
@@ -60,7 +61,7 @@ func TestCrossUIDHelperFixture(t *testing.T) {
 		name     string
 		uid, gid int
 		mode     os.FileMode
-	}{{"ops", fixtureRuntimeUID, fixtureRuntimeUID, 0700}, {"workshop", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"store", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"volume", fixtureRuntimeUID, fixtureRuntimeUID, 0750}, {"volume/egg", fixtureRuntimeUID, fixtureRuntimeUID, 0770}, {"socket", fixtureRuntimeUID, fixtureRuntimeUID, 0770}} {
+	}{{"backup", fixtureRuntimeUID, fixtureRuntimeUID, 0700}, {"ops", fixtureRuntimeUID, fixtureRuntimeUID, 0700}, {"workshop", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"store", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"volume", fixtureRuntimeUID, fixtureRuntimeUID, 0750}, {"volume/egg", fixtureRuntimeUID, fixtureRuntimeUID, 0770}, {"socket", fixtureRuntimeUID, fixtureRuntimeUID, 0770}} {
 		p := filepath.Join(base, v.name)
 		if e = os.Mkdir(p, v.mode); e != nil {
 			t.Fatal(e)
@@ -183,7 +184,7 @@ func TestCrossUIDHelperFixture(t *testing.T) {
 	for _, role := range []struct {
 		name string
 		uid  uint32
-	}{{"operations-live", fixtureDaemonUID}, {"operations-wrong-peer", fixtureRuntimeUID}} {
+	}{{"operations-live", fixtureDaemonUID}, {"backup-live", fixtureDaemonUID}} {
 		b, e := command(role.name, role.uid).CombinedOutput()
 		if e != nil {
 			t.Fatalf("%s: %v\n%s", role.name, e, b)
@@ -195,6 +196,16 @@ func TestCrossUIDHelperFixture(t *testing.T) {
 	}
 	if e = holder.Wait(); e != nil {
 		t.Fatalf("lease fixture: %v %s", e, holdLog.String())
+	}
+	for _, role := range []struct {
+		name string
+		uid  uint32
+	}{{"operations-wrong-peer", fixtureRuntimeUID}, {"backup-wrong-peer", fixtureRuntimeUID}, {"backup-stopped", fixtureDaemonUID}} {
+		b, e := command(role.name, role.uid).CombinedOutput()
+		if e != nil {
+			t.Fatalf("%s: %v\n%s", role.name, e, b)
+		}
+		t.Logf("%s stopped distinct-UID subprocess: %s", role.name, b)
 	}
 	b, e := command("operations-stopped", fixtureDaemonUID).CombinedOutput()
 	if e != nil {
@@ -259,8 +270,39 @@ func TestCrossUIDFixtureChild(t *testing.T) {
 			t.Fatal("wrong operations helper UID")
 		}
 		put(t, volume, "dumps/private.dmp", "sensitive fixture binary\x00")
-		e := RunHelper(context.Background(), HelperConfig{Volume: volume, Socket: filepath.Join(base, "socket/ops.sock"), NodeUID: fixtureDaemonUID, RuntimeUID: fixtureRuntimeUID, AccessGID: fixtureRuntimeUID, Operations: &privateops.Policy{Enabled: true, Root: filepath.Join(base, "ops"), ServerID: "one", DumpSource: "dumps", Dumps: true}})
+		e := RunHelper(context.Background(), HelperConfig{Volume: volume, Socket: filepath.Join(base, "socket/ops.sock"), NodeUID: fixtureDaemonUID, RuntimeUID: fixtureRuntimeUID, AccessGID: fixtureRuntimeUID, Backup: &backup.Policy{Root: filepath.Join(base, "backup"), RootID: "fixture", ServerID: "one", MinFreeBytes: 64 << 20}, Operations: &privateops.Policy{Enabled: true, Root: filepath.Join(base, "ops"), ServerID: "one", DumpSource: "dumps", Dumps: true}})
 		t.Fatal(e)
+	case "backup-live", "backup-stopped", "backup-wrong-peer":
+		srv := node.Server{ID: "one", Volume: volume, Helper: &node.PrivateHelper{Socket: filepath.Join(base, "socket/ops.sock"), UID: fixtureRuntimeUID, GID: fixtureRuntimeUID}}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		m, e := backup.Create(ctx, srv, backup.Options{})
+		if role != "backup-stopped" {
+			if e == nil {
+				t.Fatal("live or unauthorized backup accepted")
+			}
+			return
+		}
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = os.ReadFile(filepath.Join(volume, "game/csgo/cfg/server.cfg")); e == nil {
+			t.Fatal("node read private backup input directly")
+		}
+		if _, e = os.ReadFile(filepath.Join(base, "backup", "archives", m.BackupID, "archive.tar.gz")); e == nil {
+			t.Fatal("node read private archive directly")
+		}
+		p, e := backup.PreviewRestore(ctx, srv, m.BackupID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if e = backup.Restore(ctx, srv, p); e != nil {
+			t.Fatal(e)
+		}
+		i, e := os.Stat(filepath.Join(volume, "game/csgo/cfg/server.cfg"))
+		if e != nil || i.Mode().Perm() != 0600 || i.Sys().(*syscall.Stat_t).Uid != fixtureRuntimeUID || i.Sys().(*syscall.Stat_t).Gid != fixtureRuntimeUID {
+			t.Fatal("backup restore changed private metadata", e)
+		}
 	case "operations-lease":
 		release, e := runtimelease.Acquire(volume)
 		if e != nil {

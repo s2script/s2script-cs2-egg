@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
+	"github.com/s2script/s2script-cs2-egg/internal/backup"
 	node "github.com/s2script/s2script-cs2-egg/internal/nodetypes"
 	"github.com/s2script/s2script-cs2-egg/internal/privateops"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
@@ -26,6 +27,7 @@ import (
 // RuntimeUID with AccessGID as a supplementary group, without any capabilities.
 // The socket and configuration must be outside all container mounts.
 type HelperConfig struct {
+	Backup        *backup.Policy     `json:"backup,omitempty"`
 	Operations    *privateops.Policy `json:"operations,omitempty"`
 	WorkshopRoot  string             `json:"workshop_root,omitempty"`
 	WorkshopMode  string             `json:"workshop_mode,omitempty"`
@@ -71,7 +73,7 @@ func LoadHelperConfig(path string) (HelperConfig, error) {
 	return c, nil
 }
 func (c HelperConfig) validate() error {
-	if c.Volume == "" || c.Socket == "" || c.SharedRoot == "" && c.WorkshopRoot == "" && c.Operations == nil {
+	if c.Volume == "" || c.Socket == "" || c.SharedRoot == "" && c.WorkshopRoot == "" && c.Operations == nil && c.Backup == nil {
 		return errors.New("fixed helper volume/socket/store required")
 	}
 	for _, p := range []string{c.Volume, c.SharedRoot, c.WorkshopRoot, c.Socket} {
@@ -88,6 +90,22 @@ func (c HelperConfig) validate() error {
 	overlap := func(a, b string) bool { return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/") }
 	if c.SharedRoot != "" && (overlap(c.Volume, c.SharedRoot) || overlap(c.Socket, c.SharedRoot)) || overlap(c.Socket, c.Volume) || c.WorkshopRoot != "" && (overlap(c.Volume, c.WorkshopRoot) || overlap(c.Socket, c.WorkshopRoot)) {
 		return errors.New("helper socket/store must be outside the private volume")
+	}
+	if c.Backup != nil {
+		if e := c.Backup.Validate(); e != nil {
+			return e
+		}
+		for _, p := range []string{c.Volume, c.Socket, c.SharedRoot, c.WorkshopRoot} {
+			if p != "" && overlap(c.Backup.Root, p) {
+				return errors.New("backup root must be separate from volume/socket/stores")
+			}
+		}
+		if c.Operations != nil && overlap(c.Backup.Root, c.Operations.Root) {
+			return errors.New("backup and operations roots must be separate")
+		}
+		if _, e := backup.Open(c.Volume, *c.Backup); e != nil {
+			return e
+		}
 	}
 	if c.Operations != nil {
 		if e := c.Operations.Validate(); e != nil {
@@ -242,6 +260,12 @@ func helperSession(ctx context.Context, conn net.Conn, c HelperConfig) error {
 	first, e := protocol.Read(conn)
 	if e != nil {
 		return e
+	}
+	if first.Version == protocol.Version && first.ID == "backup" && first.Type == "begin" {
+		if c.Backup == nil {
+			return (volumehelper.Session{Conn: conn, Family: "backup"}).Write("result", backup.Reply{Error: "backup helper policy not configured"})
+		}
+		return backup.Serve(ctx, conn, c.Volume, *c.Backup, first)
 	}
 	if first.Version == protocol.Version && first.ID == "operations" && first.Type == "begin" {
 		if c.Operations == nil {
