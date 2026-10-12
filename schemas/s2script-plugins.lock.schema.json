@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "S2Script installed plugin facts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "plugins"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version", "source", "sha256", "filename", "enabled", "managed", "verification", "last_check_status", "manifest"],
+        "properties": {
+          "name": {"type": "string"},
+          "version": {"type": "string", "description": "Exact validated SemVer from manifest"},
+          "source": {"enum": ["release", "registry", "local"]},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "filename": {"type": "string", "maxLength": 240, "pattern": "^[a-zA-Z0-9_-][a-zA-Z0-9._-]*\\.s2sp$"},
+          "enabled": {"type": "boolean"},
+          "managed": {"type": "boolean"},
+          "verification": {"enum": ["verified", "unverified"]},
+          "parents": {"type": "array", "items": {"type": "string"}},
+          "last_check_status": {"type": "string"},
+          "last_check_time": {"type": "string", "format": "date-time"},
+          "source_url": {"type": "string"},
+          "source_revision": {"type": "string"},
+          "generation": {"type": "string"},
+          "review_state": {"type": "string"},
+          "upstream_enabled": {"type": "boolean"},
+          "manifest": {"type": "object", "required": ["id", "version", "apiVersion"]}
+        },
+        "allOf": [{"if": {"properties": {"managed": {"const": true}}}, "then": {"properties": {"source": {"enum": ["release", "registry"]}, "verification": {"const": "verified"}}}}]
+      }
+    }
+  }
+}

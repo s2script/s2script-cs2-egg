@@ -4,6 +4,7 @@ package artifact
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 )
 
@@ -35,5 +36,24 @@ func TestAcquireCrossProcess(t *testing.T) {
 	}
 	if e = release(); e != nil {
 		t.Fatal(e)
+	}
+}
+
+func TestHasPendingRejectsUnsafeAndDetectsEmptyTransaction(t *testing.T) {
+	root := t.TempDir()
+	pending, e := HasPending(root)
+	if e != nil || pending {
+		t.Fatalf("%v %v", pending, e)
+	}
+	if e = os.Mkdir(filepath.Join(root, transactionDir), 0700); e != nil {
+		t.Fatal(e)
+	}
+	if pending, e = HasPending(root); e != nil || !pending {
+		t.Fatalf("%v %v", pending, e)
+	}
+	os.Remove(filepath.Join(root, transactionDir))
+	os.Symlink(t.TempDir(), filepath.Join(root, transactionDir))
+	if _, e = HasPending(root); e == nil {
+		t.Fatal("followed pending transaction symlink")
 	}
 }

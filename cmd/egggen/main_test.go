@@ -11,7 +11,7 @@ import (
 func TestEgggenCheckNeverRewrites(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "egg.json")
-	catalog := filepath.Join(root, "plugins.md")
+	catalog := filepath.Join(root, "bundled-plugins.md")
 	var out, errs bytes.Buffer
 	if run([]string{"--output", target, "--catalog-output", catalog}, &out, &errs) != 0 {
 		t.Fatal(errs.String())

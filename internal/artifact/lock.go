@@ -35,3 +35,22 @@ func Acquire(root string) (func() error, error) {
 		return result
 	}, nil
 }
+
+// HasPending checks for recovery work without mutating anything. Caller holds
+// Acquire. A pending transaction requires stopped consumers even for callers
+// intending only a policy edit, because Apply would otherwise recover it.
+func HasPending(root string) (bool, error) {
+	d, e := openDir(root)
+	if e != nil {
+		return false, e
+	}
+	defer d.Close()
+	fd, e := syscall.Openat(int(d.Fd()), transactionDir, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if errors.Is(e, syscall.ENOENT) {
+		return false, nil
+	}
+	if e != nil {
+		return false, e
+	}
+	return true, syscall.Close(fd)
+}

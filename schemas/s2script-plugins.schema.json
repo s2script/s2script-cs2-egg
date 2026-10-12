@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "S2Script desired plugin policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "plugins"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plugins": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/identity"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source"],
+        "properties": {
+          "source": {"enum": ["release", "registry", "local"]},
+          "version": {"type": "string", "maxLength": 256, "description": "Empty or * means wildcard; otherwise exact SemVer or supported comparisons/ranges. Runtime validates SemVer syntax."},
+          "enabled": {"type": "boolean"},
+          "with": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/identity"}}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identity": {"type": "string", "maxLength": 214, "pattern": "^(?:@[a-zA-Z0-9][a-zA-Z0-9._-]*/)?[a-zA-Z0-9][a-zA-Z0-9._-]*$"}
+  }
+}

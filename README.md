@@ -98,13 +98,15 @@ This example explicitly opts into tokenless mode for local diagnostics and disab
 | `S2SCRIPT_PLUGIN_FILE` | `plugins.file` | `s2script-plugins.json`; relative file path within root, including existing symlink resolution |
 | `S2SCRIPT_HUD` | `frameworks.hud` | `0`; explicit `0` or `1`; optional native HUD setup is planned |
 | `DISCORD_WEBHOOK_URL` | `webhook.url` | Empty secret; HTTPS Discord `/api[/vN]/webhooks/<numeric-id>/<token>` URL when configured |
-| `S2SCRIPT_PLUGIN_<NAME>` | `plugins.bundled` | `default`, `0`, or `1`; see [generated plugin controls](docs/plugins.md) |
+| `S2SCRIPT_PLUGIN_<NAME>` | `plugins.bundled` | `default`, `0`, or `1`; see [generated plugin controls](docs/bundled-plugins.md) |
 
 Webhook hostnames are restricted to `discord.com`, `discordapp.com`, `canary.discord.com`, and `ptb.discord.com`; credentials, queries, and fragments in URLs are rejected. Readiness timeout accepts 1–3600 seconds; polling accepts 1 second through that timeout. Webhook timeout accepts 1–60 seconds. Additional selectable event names are `server.restart`, `server.update`, `backup`, and `guard`. These are validated settings for future runtime behavior; no notification is sent in this milestone.
 
 Panel plugin `default` preserves saved configuration enablement. A later inventory reconciler will give an installed-list override precedence over the release default; only explicit panel `0`/`1` will force a change. The configuration exposes those explicit overrides separately for that consumer. The installed-list file is not created or interpreted yet. Every installed plugin, including disabled/pinned entries, will be checked at startup; disabled artifacts will remain outside the runtime's top-level scan. Those behaviors are planned, not implemented here.
 
 `CUSTOM_PARAMS` is data. For example, `+hostname "My server" ; $(touch /tmp/file)` becomes literal arguments, including `;` and `$(touch`; it is never passed to a shell. Unbalanced quotes, a trailing escape, and NUL bytes are rejected. Standard launch arguments will be constructed by the future runtime.
+
+Plugin policy, inventory and CLI commands are documented in [the plugin operator guide](docs/plugins.md). Registry reconciliation remains an explicit deferred integration in this milestone.
 
 ## Development egg import
 
@@ -115,7 +117,7 @@ The egg declares `s2egg run`, graceful stop command `quit`, a future `S2EGG_READ
 To verify the saved artifacts without rewriting them:
 
 ```sh
-go run ./cmd/egggen --check --catalog-output docs/plugins.md
+go run ./cmd/egggen --check --catalog-output docs/bundled-plugins.md
 ```
 
 The future server runs as its container user. It requires no Docker socket or Wings administrator credential mounted into the game container. Optional node management, shared updates, backups, workshop management, guard features, and lifecycle notifications remain planned. Game readiness will be established by a runtime check before `server.up`; a process spawn alone will not announce success. Delivery after SIGKILL or host/power failure cannot be guaranteed by the standalone process.

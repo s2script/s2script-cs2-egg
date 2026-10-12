@@ -63,3 +63,17 @@ func TestCLIRejectsInvalidConfigAndUnknownCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestPluginCommandsAreRouted(t *testing.T) {
+	root := t.TempDir()
+	lookup := func(k string) (string, bool) { return "1", k == "ALLOW_TOKENLESS" }
+	var out, errs bytes.Buffer
+	if code := run([]string{"plugins", "list", "--root", root}, lookup, &out, &errs); code != 0 || !strings.Contains(out.String(), `"installed"`) {
+		t.Fatalf("%d %s %s", code, out.String(), errs.String())
+	}
+	out.Reset()
+	errs.Reset()
+	if code := run([]string{"plugins", "add", "hello-world", "--version", "1.2.3", "--disabled", "--root", root}, lookup, &out, &errs); code != 1 || !strings.Contains(out.String(), "policy saved") || !strings.Contains(errs.String(), "unavailable") {
+		t.Fatalf("%d %s %s", code, out.String(), errs.String())
+	}
+}

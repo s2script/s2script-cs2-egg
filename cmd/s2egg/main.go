@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,13 +12,14 @@ import (
 	"path/filepath"
 
 	"github.com/s2script/s2script-cs2-egg/internal/config"
+	"github.com/s2script/s2script-cs2-egg/internal/plugins"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.LookupEnv, os.Stdout, os.Stderr)) }
 
 func run(args []string, lookup func(string) (string, bool), out, errs io.Writer) int {
 	usage := func() int {
-		fmt.Fprintln(errs, "usage: s2egg config check|show [--root PATH] | s2egg doctor [--root PATH]")
+		fmt.Fprintln(errs, "usage: s2egg config check|show [--root PATH] | s2egg doctor [--root PATH] | s2egg plugins COMMAND [NAME] [OPTIONS]")
 		return 2
 	}
 	if len(args) == 0 {
@@ -25,6 +27,8 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 	}
 	command := ""
 	switch args[0] {
+	case "plugins":
+		return plugins.RunCLI(context.Background(), args[1:], lookup, out, errs, nil)
 	case "config":
 		if len(args) < 2 || (args[1] != "check" && args[1] != "show") {
 			return usage()

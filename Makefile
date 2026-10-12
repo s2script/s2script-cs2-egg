@@ -16,10 +16,10 @@ vet:
 	$(GO) vet ./...
 
 egg:
-	$(GO) run ./cmd/egggen --image $(IMAGE) --catalog-output docs/plugins.md
+	$(GO) run ./cmd/egggen --image $(IMAGE) --catalog-output docs/bundled-plugins.md
 
 egg-check:
-	$(GO) run ./cmd/egggen --image $(IMAGE) --catalog-output docs/plugins.md --check
+	$(GO) run ./cmd/egggen --image $(IMAGE) --catalog-output docs/bundled-plugins.md --check
 
 clean:
 	rm -rf bin
