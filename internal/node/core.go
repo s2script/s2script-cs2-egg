@@ -18,6 +18,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/alerts"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
+	"github.com/s2script/s2script-cs2-egg/internal/nodetypes"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/server"
 )
@@ -68,6 +69,11 @@ func New(cfg config.Node, sink events.Sink) (*Core, error) {
 			return nil, errors.New("daemon must belong to configured socket access groups")
 		}
 		c.servers[s.ID] = Server{ID: s.ID, Volume: s.Volume, SocketPath: filepath.Join(s.Volume, "egg/s2node.sock"), Allocation: s.Allocation}
+		if s.HelperSocket != "" {
+			srv := c.servers[s.ID]
+			srv.Helper = &nodetypes.PrivateHelper{Socket: s.HelperSocket, UID: s.PeerUID, GID: s.AccessGID}
+			c.servers[s.ID] = srv
+		}
 		c.statuses[s.ID] = server.Status{State: "unknown", Versions: map[string]string{}}
 	}
 	return c, nil
@@ -526,12 +532,12 @@ func validateAction(m protocol.Message) error {
 		}
 	case protocol.CapCache:
 		var r protocol.CacheRequest
-		if protocol.Decode(m.Payload, &r) != nil || r.Operation != "status" {
+		if protocol.Decode(m.Payload, &r) != nil || !protocol.CacheOperation(r.Operation) {
 			return errors.New("unsupported cache request")
 		}
 	case protocol.CapWorkshop:
 		var r protocol.WorkshopRequest
-		if protocol.Decode(m.Payload, &r) != nil || r.ItemID == "" || len(r.ItemID) > 32 {
+		if protocol.Decode(m.Payload, &r) != nil || !protocol.WorkshopOperation(r.Operation) || len(r.ItemID) > 32 {
 			return errors.New("invalid workshop request")
 		}
 		for _, ch := range r.ItemID {

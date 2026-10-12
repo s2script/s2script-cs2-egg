@@ -18,6 +18,7 @@ import (
 
 	"github.com/s2script/s2script-cs2-egg/deploy"
 	"github.com/s2script/s2script-cs2-egg/internal/alerts"
+	"github.com/s2script/s2script-cs2-egg/internal/cache"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/node"
@@ -25,17 +26,21 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/scheduler"
 	"github.com/s2script/s2script-cs2-egg/internal/shared"
 	"github.com/s2script/s2script-cs2-egg/internal/wings"
+	"github.com/s2script/s2script-cs2-egg/internal/workshop"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 func run(args []string, out, errs io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(errs, "usage: s2node run|config-check|status|doctor|shared-build|shared-prune|shared-attach|helper-run --config PATH | install --directory PATH")
+		fmt.Fprintln(errs, "usage: s2node run|config-check|status|doctor|shared-build|shared-prune|shared-attach|cache-status|cache-sync|cache-prune|workshop-status|workshop-sync|workshop-prune|helper-run --config PATH | install --directory PATH")
 		return 2
 	}
 	command := args[0]
 	flags := flag.NewFlagSet("s2node", flag.ContinueOnError)
 	flags.SetOutput(errs)
+	source := flags.String("source", "", "cache source: s2script/metamod/mam/registry")
+	name := flags.String("name", "", "registry package identity")
+	version := flags.String("version", "", "exact artifact version")
 	path := flags.String("config", "/etc/s2node/node.json", "node configuration")
 	serverID := flags.String("server", "", "registered server ID for shared-attach")
 	generation := flags.String("generation", "", "published generation ID")
@@ -73,7 +78,7 @@ func run(args []string, out, errs io.Writer) int {
 		return 0
 	}
 	switch command {
-	case "run", "config-check", "status", "doctor", "shared-build", "shared-prune", "shared-attach", "updates-list", "updates-retry", "updates-cancel":
+	case "cache-sync", "cache-status", "cache-prune", "workshop-status", "workshop-sync", "workshop-prune", "run", "config-check", "status", "doctor", "shared-build", "shared-prune", "shared-attach", "updates-list", "updates-retry", "updates-cancel":
 	default:
 		fmt.Fprintln(errs, "unknown command")
 		return 2
@@ -104,6 +109,15 @@ func run(args []string, out, errs io.Writer) int {
 			return 1
 		}
 		json.NewEncoder(out).Encode(result)
+		return 0
+	}
+	if strings.HasPrefix(command, "cache-") || strings.HasPrefix(command, "workshop-") {
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		if e := storeCommand(ctx, cfg, command, *serverID, *source, *name, *version, out); e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
 		return 0
 	}
 	if command == "shared-build" || command == "shared-prune" || command == "shared-attach" {
@@ -204,6 +218,28 @@ func run(args []string, out, errs io.Writer) int {
 		fmt.Fprintln(out, "operator must provision systemd supplementary groups and ReadWritePaths for egg directories; doctor does not change permissions or acquire game locks")
 		return 0
 	case "run":
+		if cfg.Cache.Enabled {
+			s, e := cache.New(cacheOptions(cfg))
+			if e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+			if e = core.AddModule(&cache.Module{Store: s, Policy: cache.Policy{Pins: cfg.Cache.Pins}}, []string{protocol.CapCache}); e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+		}
+		if cfg.Workshop.Enabled {
+			s, e := workshop.New(workshopOptions(cfg))
+			if e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+			if e = core.AddModule(&workshop.Module{Store: s}, []string{protocol.CapWorkshop}); e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+		}
 		if cfg.Shared.Enabled {
 			store, e := shared.New(sharedOptions(cfg))
 			if e != nil {

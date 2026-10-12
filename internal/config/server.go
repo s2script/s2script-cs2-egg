@@ -21,17 +21,18 @@ import (
 
 // Server is schema version 1. Root comes only from the caller, never from JSON/env.
 type Server struct {
-	Updates       ServerUpdates `json:"updates"`
-	SchemaVersion int           `json:"schema_version"`
-	Root          string        `json:"-"`
-	Identity      string        `json:"identity"`
-	Shared        SharedClient  `json:"shared"`
-	Steam         Steam         `json:"steam"`
-	Frameworks    Frameworks    `json:"frameworks"`
-	Plugins       PluginPolicy  `json:"plugins"`
-	Launch        Launch        `json:"launch"`
-	Readiness     Readiness     `json:"readiness"`
-	Webhook       Webhook       `json:"webhook"`
+	Workshop      WorkshopClient `json:"workshop"`
+	Updates       ServerUpdates  `json:"updates"`
+	SchemaVersion int            `json:"schema_version"`
+	Root          string         `json:"-"`
+	Identity      string         `json:"identity"`
+	Shared        SharedClient   `json:"shared"`
+	Steam         Steam          `json:"steam"`
+	Frameworks    Frameworks     `json:"frameworks"`
+	Plugins       PluginPolicy   `json:"plugins"`
+	Launch        Launch         `json:"launch"`
+	Readiness     Readiness      `json:"readiness"`
+	Webhook       Webhook        `json:"webhook"`
 }
 type SharedClient struct {
 	Mount     string   `json:"mount"`
@@ -179,6 +180,9 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fail(errors.New("egg/server.json: cannot read configuration"))
+	}
+	if e := s.Workshop.Validate(); e != nil {
+		return s, e
 	}
 	if !filepath.IsAbs(s.Shared.Mount) || filepath.Clean(s.Shared.Mount) != s.Shared.Mount || s.Shared.Mount == "/" || (s.Shared.Mode != "symlink" && s.Shared.Mode != "copy" && s.Shared.Mode != "hardlink") {
 		return fail(errors.New("shared mount must be an absolute clean path and mode symlink, copy or hardlink; hardlinks must be installed by host helper"))

@@ -79,9 +79,10 @@ func (c *Client) call(ctx context.Context, cap, kind string, in, out any) error 
 	attempts := 1
 	// These operations have stable run/event IDs or replace a snapshot. Retry
 	// ambiguous transport failure once. Shared reserve/commit use durable IDs;
-	// other mutating module actions are never retried.
+	// Cache/workshop operations also carry scoped stable IDs or idempotent chunks.
+	// Other mutating module actions are never retried.
 	switch kind {
-	case "run.claim", "event", "status", "status.report", protocol.CapPrepare:
+	case "run.claim", "event", "status", "status.report", protocol.CapPrepare, protocol.CapCache, protocol.CapWorkshop:
 		attempts = 2
 	}
 	var last error

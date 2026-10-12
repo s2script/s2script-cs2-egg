@@ -40,6 +40,8 @@ type SharedNode struct {
 	ReserveBytes uint64 `json:"reserve_bytes"`
 }
 type Node struct {
+	Cache         CacheNode    `json:"cache"`
+	Workshop      WorkshopNode `json:"workshop"`
 	Updates       NodeUpdates  `json:"updates"`
 	Shared        SharedNode   `json:"shared"`
 	SchemaVersion int          `json:"schema_version"`
@@ -171,7 +173,7 @@ func (n *Node) Validate() error {
 			}
 		}
 	}
-	return nil
+	return n.validateStores()
 }
 func cleanAbsolute(s string) bool { return filepath.IsAbs(s) && s == filepath.Clean(s) && s != "/" }
 func overlaps(a, b string) bool {

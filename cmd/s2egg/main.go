@@ -20,6 +20,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/nodeclient"
 	"github.com/s2script/s2script-cs2-egg/internal/plugins"
+	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
 	runtime "github.com/s2script/s2script-cs2-egg/internal/server"
 	"github.com/s2script/s2script-cs2-egg/internal/shared"
@@ -105,6 +106,10 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 			}
 			sink = client.Route(dispatcher)
 			options.GameProvider = client
+			options.WorkshopProvider = client
+			if client.Has(protocol.CapCache) {
+				options.ArtifactFetcher = client
+			}
 			options.ControlProvider = client
 		}
 		code, e := runtime.Run(context.Background(), server, sink, os.Stdin, out, errs, options)
@@ -147,6 +152,10 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 		if connectErr == nil {
 			defer client.Close()
 			options.GameProvider = client
+			options.WorkshopProvider = client
+			if client.Has(protocol.CapCache) {
+				options.ArtifactFetcher = client
+			}
 			options.ControlProvider = client
 		}
 		if e := runtime.Prepare(ctx, server, options); e != nil {

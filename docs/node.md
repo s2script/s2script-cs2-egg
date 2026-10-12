@@ -1,6 +1,6 @@
 # Optional node core
 
-The Linux x86-64 `s2node` daemon is optional. The ordinary Pterodactyl or Pelican egg starts without it. The core provides socket-bound identity, typed capability negotiation, runtime status reports, optional-module lifecycle, and durable webhook ownership. Shared generation preparation and update scheduling are optional registered modules; cache/workshop and later administrative modules are separate milestones. The core advertises only capabilities provided by registered implementations. No Docker socket or Wings administrator credential enters the game container.
+The Linux x86-64 `s2node` daemon is optional. The ordinary Pterodactyl or Pelican egg starts without it. The core provides socket-bound identity, typed capability negotiation, runtime status reports, optional-module lifecycle, and durable webhook ownership. Shared generation preparation, update scheduling, verified artifact caching and workshop sharing are optional registered modules; see [cache and workshop](workshop.md) for source/trust policy and provisioning. The core advertises only capabilities provided by registered implementations. No Docker socket or Wings administrator credential enters the game container.
 
 ## Build, stage and configure
 

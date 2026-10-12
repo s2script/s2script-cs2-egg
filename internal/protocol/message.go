@@ -69,18 +69,99 @@ type Preparation struct {
 	Reservation string `json:"reservation"`
 	Generation  string `json:"generation"`
 }
+type ArtifactSelection struct {
+	Source         string `json:"source"`
+	Name           string `json:"name,omitempty"`
+	Version        string `json:"version"`
+	SHA256         string `json:"sha256"`
+	SourceRevision string `json:"source_revision,omitempty"`
+	Integrity      string `json:"integrity,omitempty"`
+}
 type CacheRequest struct {
-	Operation string `json:"operation"`
+	Operation string            `json:"operation"`
+	RequestID string            `json:"request_id,omitempty"`
+	Handle    string            `json:"handle,omitempty"`
+	Artifact  ArtifactSelection `json:"artifact"`
+	Offset    int64             `json:"offset,omitempty"`
 }
 type CacheResult struct {
-	State string `json:"state"`
+	State  string `json:"state"`
+	Handle string `json:"handle,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
+	Size   int64  `json:"size,omitempty"`
+	Data   []byte `json:"data,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
+
+func CacheOperation(s string) bool {
+	switch s {
+	case "submit", "validate", "status", "read", "release":
+		return true
+	}
+	return false
+}
+
 type WorkshopRequest struct {
-	ItemID string `json:"item_id"`
+	Digest    string         `json:"digest,omitempty"`
+	Operation string         `json:"operation"`
+	RequestID string         `json:"request_id,omitempty"`
+	Handle    string         `json:"handle,omitempty"`
+	ItemID    string         `json:"item_id,omitempty"`
+	Revision  string         `json:"revision,omitempty"`
+	Token     string         `json:"token,omitempty"`
+	File      string         `json:"file,omitempty"`
+	Offset    int64          `json:"offset,omitempty"`
+	Data      []byte         `json:"data,omitempty"`
+	Files     []WorkshopFile `json:"files,omitempty"`
+}
+type WorkshopFile struct {
+	Name   string `json:"name"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256"`
+}
+type WorkshopGeneration struct {
+	AppID    int            `json:"app_id"`
+	ItemID   string         `json:"item_id"`
+	Revision string         `json:"revision"`
+	Importer string         `json:"importer"`
+	Digest   string         `json:"digest"`
+	Updated  int64          `json:"updated"`
+	Files    []WorkshopFile `json:"files"`
+}
+type WorkshopLink struct {
+	Name   string `json:"name"`
+	Device uint64 `json:"device"`
+	Inode  uint64 `json:"inode"`
+	UID    uint32 `json:"uid"`
+	Mode   uint32 `json:"mode"`
+}
+type WorkshopLinkInfo struct {
+	AppID    int            `json:"app_id"`
+	ItemID   string         `json:"item_id"`
+	Revision string         `json:"revision"`
+	Digest   string         `json:"digest"`
+	Files    []WorkshopLink `json:"files"`
 }
 type WorkshopResult struct {
-	State string `json:"state"`
+	Links      *WorkshopLinkInfo   `json:"links,omitempty"`
+	State      string              `json:"state"`
+	Handle     string              `json:"handle,omitempty"`
+	Token      string              `json:"token,omitempty"`
+	Owner      string              `json:"owner,omitempty"`
+	Revision   string              `json:"revision,omitempty"`
+	Generation *WorkshopGeneration `json:"generation,omitempty"`
+	Data       []byte              `json:"data,omitempty"`
+	Error      string              `json:"error,omitempty"`
 }
+
+func WorkshopOperation(s string) bool {
+	switch s {
+	case "select", "begin", "import-chunk", "seal", "status", "reserve", "read", "commit", "finish", "link-info":
+		return true
+	}
+	return false
+}
+
 type UpdateControl struct {
 	ActionID  string    `json:"action_id,omitempty"`
 	RunID     string    `json:"run_id,omitempty"`

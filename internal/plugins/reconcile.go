@@ -15,6 +15,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/framework"
+	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 )
 
 type Check struct {
@@ -264,6 +265,11 @@ func (r Registry) prepare(ctx context.Context, cfg config.Server, policy Policy,
 	sort.Strings(entryNames)
 	for _, name := range entryNames {
 		p := selectedEntries[name]
+		if validator, ok := r.Fetcher.(artifact.SelectedValidator); ok {
+			if e = validator.ValidateArtifact(ctx, protocol.ArtifactSelection{Source: "registry", Name: p.Name, Version: p.Version, SHA256: p.SHA256}); e != nil {
+				return out, e
+			}
+		}
 		path := filepath.Join(stage, p.SHA256+".s2sp")
 		prior, exists := old[name]
 		if exists && (!prior.Managed || prior.Verification != "verified") && (prior.SHA256 != p.SHA256 || prior.Version != p.Version) {

@@ -25,9 +25,15 @@ import (
 type GameProvider interface {
 	Prepare(context.Context, config.Server) (handled bool, err error)
 }
+type WorkshopProvider interface {
+	PrepareWorkshopLocked(context.Context, config.Server) error
+}
+
 type Options struct {
-	GameProvider    GameProvider
-	ControlProvider ControlProvider
+	ArtifactFetcher  artifact.SelectedFetcher
+	WorkshopProvider WorkshopProvider
+	GameProvider     GameProvider
+	ControlProvider  ControlProvider
 }
 type preparationRunKey struct{}
 
@@ -53,6 +59,7 @@ func withProvider(standalone func(context.Context, config.Server) (string, error
 }
 
 type prepOptions struct {
+	workshop WorkshopProvider
 	retained func(context.Context, config.Server, map[string]string) (framework.Selection, error)
 	steam    func(context.Context, config.Server) (string, error)
 	resolve  func(context.Context, config.Server, map[string]string) (framework.Selection, error)
@@ -85,7 +92,17 @@ func prepareRuntime(ctx context.Context, cfg config.Server, emit emitFunc) (map[
 }
 
 func prepareRuntimeOptions(ctx context.Context, cfg config.Server, emit emitFunc, options Options) (map[string]string, error) {
+	if cfg.Workshop.Enabled && options.WorkshopProvider == nil {
+		return nil, errors.New("workshop sharing enabled but node unavailable")
+	}
 	preparation := defaultPreparation()
+	if options.ArtifactFetcher != nil {
+		preparation.native = func(ctx context.Context, root string, s framework.Selection) (framework.Prepared, error) {
+			return framework.PrepareWithFetcher(ctx, root, s, options.ArtifactFetcher)
+		}
+		preparation.plugins = (plugins.Registry{Fetcher: options.ArtifactFetcher}).Prepare
+	}
+	preparation.workshop = options.WorkshopProvider
 	preparation.steam = withProvider(preparation.steam, options.GameProvider)
 	return prepareWith(ctx, cfg, emit, preparation)
 }
@@ -119,6 +136,11 @@ func prepareWith(ctx context.Context, cfg config.Server, emit emitFunc, o prepOp
 	versions, e := reconcileManaged(ctx, cfg, policy, installed, emit, o)
 	if e != nil {
 		return nil, e
+	}
+	if o.workshop != nil {
+		if e = o.workshop.PrepareWorkshopLocked(ctx, cfg); e != nil {
+			return nil, e
+		}
 	}
 	versions["steam_build"] = build
 	if f, err := os.Open(filepath.Join(cfg.Root, ".s2shared.json")); err == nil {

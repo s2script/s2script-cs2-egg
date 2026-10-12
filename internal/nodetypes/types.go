@@ -10,7 +10,14 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/server"
 )
 
+type PrivateHelper struct {
+	Socket string `json:"socket"`
+	UID    uint32 `json:"uid"`
+	GID    int    `json:"gid"`
+}
+
 type Server struct {
+	Helper     *PrivateHelper    `json:"-"`
 	ID         string            `json:"id"`
 	Volume     string            `json:"volume"`
 	SocketPath string            `json:"socket_path"`

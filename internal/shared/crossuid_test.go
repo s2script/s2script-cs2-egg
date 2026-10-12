@@ -4,11 +4,15 @@ package shared
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
 	node "github.com/s2script/s2script-cs2-egg/internal/nodetypes"
+	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
+	"github.com/s2script/s2script-cs2-egg/internal/workshop"
 	"io"
 	"os"
 	"os/exec"
@@ -55,7 +59,7 @@ func TestCrossUIDHelperFixture(t *testing.T) {
 		name     string
 		uid, gid int
 		mode     os.FileMode
-	}{{"store", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"volume", fixtureRuntimeUID, fixtureRuntimeUID, 0750}, {"volume/egg", fixtureRuntimeUID, fixtureRuntimeUID, 0770}, {"socket", fixtureRuntimeUID, fixtureRuntimeUID, 0770}} {
+	}{{"workshop", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"store", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"volume", fixtureRuntimeUID, fixtureRuntimeUID, 0750}, {"volume/egg", fixtureRuntimeUID, fixtureRuntimeUID, 0770}, {"socket", fixtureRuntimeUID, fixtureRuntimeUID, 0770}} {
 		p := filepath.Join(base, v.name)
 		if e = os.Mkdir(p, v.mode); e != nil {
 			t.Fatal(e)
@@ -125,7 +129,7 @@ func TestCrossUIDHelperFixture(t *testing.T) {
 		}
 		t.Logf("%s subprocess: %s", role.name, b)
 	}
-	for _, name := range []string{".runtime-lease", ".artifact-lock", "game/csgo/cfg/server.cfg"} {
+	for _, name := range []string{".runtime-lease", ".artifact-lock", "game/csgo/cfg/server.cfg", workshop.ACFPath} {
 		info, e := os.Stat(filepath.Join(base, "volume", name))
 		if e != nil || info.Mode().Perm() != 0600 || info.Sys().(*syscall.Stat_t).Uid != fixtureRuntimeUID {
 			t.Fatalf("private identity/mode changed: %s %v", name, e)
@@ -164,6 +168,7 @@ func TestCrossUIDFixtureChild(t *testing.T) {
 	}
 	volume := filepath.Join(base, "volume")
 	store := filepath.Join(base, "store")
+	workshopRoot := filepath.Join(base, "workshop")
 	socket := filepath.Join(base, "socket/helper.sock")
 	switch role {
 	case "helper":
@@ -171,7 +176,14 @@ func TestCrossUIDFixtureChild(t *testing.T) {
 			t.Fatal("wrong helper UID")
 		}
 		put(t, volume, "game/csgo/cfg/server.cfg", "private operator configuration")
-		e := RunHelper(context.Background(), HelperConfig{Volume: volume, SharedRoot: store, Socket: socket, NodeUID: fixtureDaemonUID, RuntimeUID: fixtureRuntimeUID, AccessGID: fixtureRuntimeUID})
+		files := crossUIDWorkshopFiles()
+		var size int
+		for n, b := range files {
+			put(t, volume, workshop.ContentPath+"/123/"+n, string(b))
+			size += len(b)
+		}
+		put(t, volume, workshop.ACFPath, fmt.Sprintf(`"AppWorkshop" { "appid" "730" "WorkshopItemsInstalled" {"123" {"manifest" "55" "size" "%d"}} "WorkshopItemDetails" {"123" {"manifest" "55" "latest_manifest" "55"}} }`, size))
+		e := RunHelper(context.Background(), HelperConfig{Volume: volume, SharedRoot: store, WorkshopRoot: workshopRoot, WorkshopMode: "hardlink", WorkshopItems: []string{"123"}, Socket: socket, NodeUID: fixtureDaemonUID, RuntimeUID: fixtureRuntimeUID, AccessGID: fixtureRuntimeUID})
 		t.Fatal(e)
 	case "attach":
 		if os.Geteuid() != fixtureDaemonUID {
@@ -200,12 +212,73 @@ func TestCrossUIDFixtureChild(t *testing.T) {
 		if !os.SameFile(a, b) {
 			t.Fatal("helper did not install actual hardlink")
 		}
+		srv := node.Server{ID: "one", Volume: volume, Helper: &node.PrivateHelper{Socket: socket, UID: fixtureRuntimeUID, GID: fixtureRuntimeUID}}
+		ws, e := workshop.New(workshop.Options{Root: workshopRoot, Servers: []node.Server{srv}, TrustedImporters: []string{"one"}, Items: []string{"123"}, Mode: "hardlink", Details: func(context.Context, []string) (map[string]workshop.Detail, error) {
+			return map[string]workshop.Detail{"123": {ID: "123", Revision: "55", AppID: 730}}, nil
+		}})
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = os.ReadFile(filepath.Join(volume, workshop.ACFPath)); e == nil {
+			t.Fatal("daemon read private ACF")
+		}
+		if e = ws.Start(context.Background()); e != nil {
+			t.Fatal(e)
+		}
+		defer (&workshop.Module{Store: ws}).Close(context.Background())
+		result, e := ws.Sync(context.Background(), srv)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if len(result.Imported) != 1 || len(result.Linked) != 1 {
+			t.Fatal("workshop private import/attach missing", result)
+		}
+		for name := range crossUIDWorkshopFiles() {
+			src, e := os.Stat(filepath.Join(workshopRoot, "generations/123/55", name))
+			if e != nil {
+				t.Fatal(e)
+			}
+			dst, e := os.Stat(filepath.Join(volume, workshop.ContentPath, "123", name))
+			if e != nil || !os.SameFile(src, dst) || dst.Sys().(*syscall.Stat_t).Uid != fixtureDaemonUID || dst.Mode().Perm() != 0444 {
+				t.Fatal("workshop hardlink ownership/content contract", e)
+			}
+		}
+		wg, e := ws.Generation("123", "55")
+		if e != nil {
+			t.Fatal(e)
+		}
+		links, e := ws.Handle(context.Background(), srv.ID, protocol.WorkshopRequest{Operation: "link-info", ItemID: wg.ItemID, Revision: wg.Revision, Digest: wg.Digest})
+		if e != nil {
+			t.Fatal(e)
+		}
+		// Transfer the real daemon-derived inode metadata to the subsequent runtime
+		// probe. Socket authentication is covered by the live Sync session above;
+		// this probe isolates boot verification of those actual distinct-UID inodes.
+		workshopData, e := json.Marshal(struct {
+			Generation workshop.Generation
+			Source     protocol.WorkshopResult
+		}{wg, links})
+		if e != nil {
+			t.Fatal(e)
+		}
+		if e = os.WriteFile(filepath.Join(workshopRoot, "fixture-workshop.json"), workshopData, 0644); e != nil {
+			t.Fatal(e)
+		}
 		if e = writeJSON(store, "fixture-generation.json", g, 0644); e != nil {
 			t.Fatal(e)
 		}
 	case "runtime-probe":
 		if os.Geteuid() != fixtureRuntimeUID {
 			t.Fatal("wrong probe UID")
+		}
+		for name := range crossUIDWorkshopFiles() {
+			p := filepath.Join(volume, workshop.ContentPath, "123", name)
+			if e := os.Chmod(p, 0644); e == nil {
+				t.Fatal("runtime chmodded workshop source")
+			}
+			if e := os.WriteFile(p, []byte("bad"), 0600); e == nil {
+				t.Fatal("runtime mutated workshop source")
+			}
 		}
 		p := filepath.Join(volume, "game/csgo/pak01.vpk")
 		if e := os.WriteFile(p, []byte("mutated"), 0600); e == nil {
@@ -232,6 +305,29 @@ func TestCrossUIDFixtureChild(t *testing.T) {
 		if e = artifact.Recover(volume); e != nil {
 			t.Fatal(e)
 		}
+		var workshopReceipt struct {
+			Generation protocol.WorkshopGeneration
+			Source     protocol.WorkshopResult
+		}
+		b, e = os.ReadFile(filepath.Join(workshopRoot, "fixture-workshop.json"))
+		if e != nil || json.Unmarshal(b, &workshopReceipt) != nil {
+			t.Fatal("missing workshop source identity", e)
+		}
+		result, e := workshop.PrepareLocked(context.Background(), workshop.LocalOptions{Root: volume, Items: []string{"123"}, Mode: "hardlink"}, func(ctx context.Context, r protocol.WorkshopRequest) (protocol.WorkshopResult, error) {
+			switch r.Operation {
+			case "link-info":
+				return workshopReceipt.Source, nil
+			case "select", "commit":
+				return protocol.WorkshopResult{State: "ready", Generation: &workshopReceipt.Generation}, nil
+			case "finish":
+				return protocol.WorkshopResult{State: "finished"}, nil
+			default:
+				return protocol.WorkshopResult{}, fmt.Errorf("unexpected boot operation %s", r.Operation)
+			}
+		})
+		if e != nil || len(result.Linked) != 1 || result.BytesSaved == 0 {
+			t.Fatal("boot verification of actual workshop hardlinks failed", result, e)
+		}
 		if e = MaterializeLocked(context.Background(), volume, store, g, "existing", "hardlink", nil, ""); e != nil {
 			t.Fatal("local verification of host hardlinks failed", e)
 		}
@@ -242,4 +338,18 @@ func TestCrossUIDFixtureChild(t *testing.T) {
 	default:
 		t.Fatal("unknown fixture role")
 	}
+}
+
+func crossUIDWorkshopFiles() map[string][]byte {
+	tree := []byte("txt\x00 \x00a\x00")
+	entry := make([]byte, 18)
+	binary.LittleEndian.PutUint32(entry[12:], 4)
+	binary.LittleEndian.PutUint16(entry[16:], 0xffff)
+	tree = append(tree, entry...)
+	tree = append(tree, 0, 0, 0)
+	header := make([]byte, 12)
+	binary.LittleEndian.PutUint32(header, 0x55aa1234)
+	binary.LittleEndian.PutUint32(header[4:], 1)
+	binary.LittleEndian.PutUint32(header[8:], uint32(len(tree)))
+	return map[string][]byte{"123_dir.vpk": append(header, tree...), "123_000.vpk": []byte("data")}
 }

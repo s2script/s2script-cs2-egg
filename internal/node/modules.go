@@ -13,6 +13,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/server"
 )
 
+type PrivateHelper = nodetypes.PrivateHelper
 type Server = nodetypes.Server
 type Health = nodetypes.Health
 type Module = nodetypes.Module

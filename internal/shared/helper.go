@@ -17,19 +17,25 @@ import (
 	node "github.com/s2script/s2script-cs2-egg/internal/nodetypes"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
+	"github.com/s2script/s2script-cs2-egg/internal/volumehelper"
+	"github.com/s2script/s2script-cs2-egg/internal/workshop"
 )
 
 // HelperConfig is an operator-owned, fixed-volume contract. The service runs as
 // RuntimeUID with AccessGID as a supplementary group, without any capabilities.
 // The socket and configuration must be outside all container mounts.
 type HelperConfig struct {
-	Volume     string   `json:"volume"`
-	SharedRoot string   `json:"shared_root"`
-	Socket     string   `json:"socket"`
-	NodeUID    uint32   `json:"node_uid"`
-	RuntimeUID uint32   `json:"runtime_uid"`
-	AccessGID  int      `json:"access_gid"`
-	Overrides  []string `json:"overrides"`
+	WorkshopRoot  string   `json:"workshop_root,omitempty"`
+	WorkshopMode  string   `json:"workshop_mode,omitempty"`
+	WorkshopMount string   `json:"workshop_mount,omitempty"`
+	WorkshopItems []string `json:"workshop_items,omitempty"`
+	Volume        string   `json:"volume"`
+	SharedRoot    string   `json:"shared_root"`
+	Socket        string   `json:"socket"`
+	NodeUID       uint32   `json:"node_uid"`
+	RuntimeUID    uint32   `json:"runtime_uid"`
+	AccessGID     int      `json:"access_gid"`
+	Overrides     []string `json:"overrides"`
 }
 
 func LoadHelperConfig(path string) (HelperConfig, error) {
@@ -63,7 +69,13 @@ func LoadHelperConfig(path string) (HelperConfig, error) {
 	return c, nil
 }
 func (c HelperConfig) validate() error {
-	for _, p := range []string{c.Volume, c.SharedRoot, c.Socket} {
+	if c.Volume == "" || c.Socket == "" || c.SharedRoot == "" && c.WorkshopRoot == "" {
+		return errors.New("fixed helper volume/socket/store required")
+	}
+	for _, p := range []string{c.Volume, c.SharedRoot, c.WorkshopRoot, c.Socket} {
+		if p == "" {
+			continue
+		}
 		if !filepath.IsAbs(p) || filepath.Clean(p) != p || p == "/" {
 			return errors.New("helper paths must be fixed clean absolute paths")
 		}
@@ -72,10 +84,13 @@ func (c HelperConfig) validate() error {
 		return errors.New("helper needs actual non-root volume UID, distinct daemon UID and configured common GID")
 	}
 	overlap := func(a, b string) bool { return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/") }
-	if overlap(c.Volume, c.SharedRoot) || overlap(c.Socket, c.Volume) || overlap(c.Socket, c.SharedRoot) {
+	if c.SharedRoot != "" && (overlap(c.Volume, c.SharedRoot) || overlap(c.Socket, c.SharedRoot)) || overlap(c.Socket, c.Volume) || c.WorkshopRoot != "" && (overlap(c.Volume, c.WorkshopRoot) || overlap(c.Socket, c.WorkshopRoot)) {
 		return errors.New("helper socket/store must be outside the private volume")
 	}
-	for _, p := range []string{c.Volume, c.SharedRoot} {
+	for _, p := range []string{c.Volume, c.SharedRoot, c.WorkshopRoot} {
+		if p == "" {
+			continue
+		}
 		d, e := artifact.OpenDirectory(p)
 		if e != nil {
 			return e
@@ -86,7 +101,7 @@ func (c HelperConfig) validate() error {
 			return e
 		}
 		uid := info.Sys().(*syscall.Stat_t).Uid
-		if p == c.Volume && uid != c.RuntimeUID || p == c.SharedRoot && uid != c.NodeUID {
+		if p == c.Volume && uid != c.RuntimeUID || p != c.Volume && uid != c.NodeUID {
 			return errors.New("helper volume/store ownership does not match configured UIDs")
 		}
 	}
@@ -205,8 +220,39 @@ func ServeHelper(ctx context.Context, l net.Listener, c HelperConfig) error {
 }
 func helperSession(ctx context.Context, conn net.Conn, c HelperConfig) error {
 	var req helperRequest
-	if e := helperRead(conn, "begin", &req); e != nil {
+	first, e := protocol.Read(conn)
+	if e != nil {
 		return e
+	}
+	if first.Version == protocol.Version && first.ID == "workshop" && first.Type == "begin-workshop" {
+		if c.WorkshopRoot == "" {
+			return volumehelper.Write(conn, "result", struct{ Error string }{"workshop helper not configured"})
+		}
+		var selection struct {
+			Mode string `json:"mode"`
+		}
+		if protocol.Decode(first.Payload, &selection) != nil {
+			return volumehelper.Write(conn, "result", struct{ Error string }{"invalid workshop selection"})
+		}
+		mode := c.WorkshopMode
+		if mode == "" {
+			mode = "copy"
+		}
+		if selection.Mode != mode {
+			return volumehelper.Write(conn, "result", struct{ Error string }{"node and helper workshop modes differ"})
+		}
+
+		e = workshop.ServePrivate(ctx, conn, workshop.LocalOptions{Root: c.Volume, HostRoot: c.WorkshopRoot, Mode: c.WorkshopMode, Mount: c.WorkshopMount, Items: c.WorkshopItems, GID: c.AccessGID})
+		if e != nil {
+			return volumehelper.Write(conn, "result", struct{ Error string }{e.Error()})
+		}
+		return nil
+	}
+	if first.Version != protocol.Version || first.ID != "attach" || first.Type != "begin" || protocol.Decode(first.Payload, &req) != nil {
+		return errors.New("invalid helper begin")
+	}
+	if c.SharedRoot == "" {
+		return errors.New("shared helper not configured")
 	}
 	if req.Mode != "copy" && req.Mode != "symlink" && req.Mode != "hardlink" {
 		return errors.New("unsupported attachment mode")
