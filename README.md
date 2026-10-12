@@ -95,6 +95,7 @@ This example explicitly opts into tokenless mode for local diagnostics and disab
 | `S2SCRIPT_UPDATE` / `METAMOD_UPDATE` | `frameworks.s2script_update` / `frameworks.metamod_update` | `1`; explicit `0` or `1`; future startup policy |
 | `S2SCRIPT_CHANNEL` | `frameworks.channel` | `stable`; `stable` or `prerelease` |
 | `S2SCRIPT_VERSION` / `METAMOD_VERSION` | `frameworks.s2script_version` / `frameworks.metamod_version` | `latest`; or exact version such as `v0.8.1` / `2.0.0-git1371`; URLs/ranges rejected; compatibility resolution is planned |
+| `S2SCRIPT_REVIEWED_ONLY` | `plugins.reviewed_only` | `0` (default) or `1`; require exact registry review state `reviewed` |
 | `S2SCRIPT_PLUGIN_FILE` | `plugins.file` | `s2script-plugins.json`; relative file path within root, including existing symlink resolution |
 | `S2SCRIPT_HUD` | `frameworks.hud` | `0`; explicit `0` or `1`; optional native HUD setup is planned |
 | `DISCORD_WEBHOOK_URL` | `webhook.url` | Empty secret; HTTPS Discord `/api[/vN]/webhooks/<numeric-id>/<token>` URL when configured |
@@ -106,7 +107,7 @@ Panel plugin `default` preserves saved configuration enablement. A later invento
 
 `CUSTOM_PARAMS` is data. For example, `+hostname "My server" ; $(touch /tmp/file)` becomes literal arguments, including `;` and `$(touch`; it is never passed to a shell. Unbalanced quotes, a trailing escape, and NUL bytes are rejected. Standard launch arguments will be constructed by the future runtime.
 
-Plugin policy, inventory and CLI commands are documented in [the plugin operator guide](docs/plugins.md). Registry reconciliation remains an explicit deferred integration in this milestone.
+Plugin policy, inventory and CLI commands are documented in [the plugin operator guide](docs/plugins.md). Registry reconciliation is implemented as a preparation library; executable startup/CLI orchestration remains deferred to the next milestone.
 
 ## Development egg import
 

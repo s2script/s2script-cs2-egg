@@ -94,7 +94,7 @@ func ParseManifest(raw []byte) (Manifest, error) {
 		return m, e
 	}
 	for field := range fields {
-		for _, canonical := range []string{"id", "version", "apiVersion", "pluginDependencies", "optionalPluginDependencies", "publishes", "compiledAgainst"} {
+		for _, canonical := range []string{"id", "version", "apiVersion", "pluginDependencies", "optionalPluginDependencies", "publishes", "compiledAgainst", "interfaceProtocol", "interfaceContracts"} {
 			if field != canonical && strings.EqualFold(field, canonical) {
 				return m, errors.New("case-aliased plugin manifest field")
 			}

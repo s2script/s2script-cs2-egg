@@ -126,3 +126,56 @@ func TestLockPreservesCaseSensitiveRawManifestMaps(t *testing.T) {
 		t.Fatalf("raw upstream map data changed: %s", lock.Plugins[0].Manifest)
 	}
 }
+
+func TestRegistryEvidenceInvalidatedByDirectArtifactMutation(t *testing.T) {
+	f := newRegistryFixture(t)
+	root := t.TempDir()
+	f.plans["a"] = plan(f.entry(t, "a", "1.0.0", ""))
+	policy := EmptyPolicy()
+	policy.Plugins["a"] = Entry{Source: "registry"}
+	prepared, e := f.prepare(t, root, policy, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	applyPrepared(t, root, prepared)
+	before, e := ReadLock(root)
+	if e != nil || len(before.RegistryRoots) != 1 {
+		t.Fatal(before, e)
+	}
+	if code, msg := cli(t, root, nil, "pin", "a", "--version", "1.0.0"); code != 0 {
+		t.Fatal(msg)
+	}
+	after, e := ReadLock(root)
+	if e != nil || len(after.RegistryRoots) != 1 {
+		t.Fatal("policy-only change lost evidence", e)
+	}
+	if code, msg := cli(t, root, nil, "disable", "a"); code != 0 {
+		t.Fatal(msg)
+	}
+	after, e = ReadLock(root)
+	if e != nil || len(after.RegistryRoots) != 0 {
+		t.Fatal("artifact change retained stale closure", e)
+	}
+}
+func TestRegistryRootEvidenceRejectsAliasedAndModifiedMembers(t *testing.T) {
+	f := newRegistryFixture(t)
+	root := t.TempDir()
+	f.plans["a"] = plan(f.entry(t, "a", "1.0.0", ""))
+	policy := EmptyPolicy()
+	policy.Plugins["a"] = Entry{Source: "registry"}
+	p, e := f.prepare(t, root, policy, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	applyPrepared(t, root, p)
+	raw, e := os.ReadFile(filepath.Join(root, LockFilename))
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, bad := range []string{strings.Replace(string(raw), `"range":`, `"Range":`, 1), strings.Replace(string(raw), `"members":`, `"Members":`, 1), strings.Replace(string(raw), `"registry_roots": [`, `"registry_roots": null,"REGISTRY_ROOTS": [`, 1)} {
+		os.WriteFile(filepath.Join(root, LockFilename), []byte(bad), 0600)
+		if _, e := ReadLock(root); e == nil {
+			t.Fatal("accepted ambiguous registry roots")
+		}
+	}
+}

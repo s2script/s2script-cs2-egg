@@ -47,7 +47,8 @@ type Frameworks struct {
 	HUD             bool   `json:"hud"`
 }
 type PluginPolicy struct {
-	File string `json:"file"`
+	ReviewedOnly bool   `json:"reviewed_only"`
+	File         string `json:"file"`
 	// Bundled holds effective enablement after saved overrides and panel policy.
 	Bundled map[string]bool `json:"bundled"`
 	// Overrides records explicit panel choices; default intentionally adds no override.
@@ -186,7 +187,7 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 			*p = n
 		}
 	}
-	for k, p := range map[string]*bool{"ALLOW_TOKENLESS": &s.Steam.AllowTokenless, "SRCDS_VALIDATE": &s.Steam.Validate, "S2SCRIPT_HUD": &s.Frameworks.HUD, "S2SCRIPT_UPDATE": &s.Frameworks.S2ScriptUpdate, "METAMOD_UPDATE": &s.Frameworks.MetamodUpdate} {
+	for k, p := range map[string]*bool{"S2SCRIPT_REVIEWED_ONLY": &s.Plugins.ReviewedOnly, "ALLOW_TOKENLESS": &s.Steam.AllowTokenless, "SRCDS_VALIDATE": &s.Steam.Validate, "S2SCRIPT_HUD": &s.Frameworks.HUD, "S2SCRIPT_UPDATE": &s.Frameworks.S2ScriptUpdate, "METAMOD_UPDATE": &s.Frameworks.MetamodUpdate} {
 		if v, ok := lookup(k); ok {
 			if v != "0" && v != "1" {
 				return fail(fmt.Errorf("%s must be 0 or 1", k))

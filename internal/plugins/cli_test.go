@@ -197,11 +197,15 @@ func TestEnableRequiredDependenciesDefersToResolver(t *testing.T) {
 func TestRequiredPublishedInterfaceBlocksRemoval(t *testing.T) {
 	candidate := Installed{Name: "provider", Manifest: json.RawMessage(`{"id":"provider","version":"3.1.0","apiVersion":"3.x","publishes":{"@community/mapchooser":{"version":"1.2.0"}}}`)}
 	consumer := Installed{Name: "consumer", Manifest: json.RawMessage(`{"id":"consumer","version":"1.0.0","apiVersion":"3.x","pluginDependencies":{"@community/mapchooser":"^1.2.0"}}`)}
-	if e := checkRemoval(candidate, []Installed{candidate, consumer}); e == nil || !strings.Contains(e.Error(), "needed") {
+	graph, e := dependencyGraph([]Installed{candidate, consumer}, selected())
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e := checkConsumers(candidate, []Installed{candidate, consumer}, graph, false); e == nil || !strings.Contains(e.Error(), "needed") {
 		t.Fatal("ignored published interface consumer", e)
 	}
 	consumer.Manifest = json.RawMessage(`{"id":"consumer","version":"1.0.0","apiVersion":"3.x","pluginDependencies":{"unknown-interface":"^1.2.0"}}`)
-	if e := checkRemoval(candidate, []Installed{candidate, consumer}); e == nil || !strings.Contains(e.Error(), "evidence unavailable") {
+	if _, e := dependencyGraph([]Installed{candidate, consumer}, selected()); e == nil || !strings.Contains(e.Error(), "evidence unavailable") {
 		t.Fatal("guessed unknown provider", e)
 	}
 }
@@ -213,6 +217,74 @@ func TestRediscoveredMissingArtifactIsPresent(t *testing.T) {
 	writeFacts(t, root, []Installed{p})
 	got, e := Discover(root)
 	if e != nil || got[0].LastCheckStatus == "missing" {
+		t.Fatal(got, e)
+	}
+}
+
+func TestCLIDependencyEnableWithPublishedProvider(t *testing.T) {
+	f := newRegistryFixture(t)
+	root := t.TempDir()
+	a := f.entry(t, "consumer", "1.0.0", `,"pluginDependencies":{"iface":"^1.0.0"}`)
+	b := f.entry(t, "provider", "3.1.0", `,"publishes":{"iface":{"version":"1.2.0"}}`)
+	f.plans["consumer"] = plan(a, b)
+	policy := EmptyPolicy()
+	disabled := false
+	policy.Plugins["consumer"] = Entry{Source: "registry", Enabled: &disabled}
+	policy.Plugins["provider"] = Entry{Source: "registry"}
+	f.plans["provider"] = plan(b)
+	p, e := f.prepare(t, root, policy, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	applyPrepared(t, root, p)
+	if code, msg := cli(t, root, nil, "enable", "consumer"); code != 0 {
+		t.Fatalf("enable failed: %d %s", code, msg)
+	}
+	got, e := Discover(root)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, p := range got {
+		if p.Name == "consumer" && !p.Enabled {
+			t.Fatal("consumer stayed disabled")
+		}
+	}
+	if code, _ := cli(t, root, nil, "disable", "provider"); code != 1 {
+		t.Fatal("disabled active consumer's provider")
+	}
+}
+
+func TestCLIRemoveConsumerReleasesProviderParents(t *testing.T) {
+	f := newRegistryFixture(t)
+	root := t.TempDir()
+	a := f.entry(t, "consumer", "1.0.0", `,"pluginDependencies":{"iface":"*"}`)
+	b := f.entry(t, "provider", "1.0.0", `,"publishes":{"iface":{"version":"1.0.0"}}`)
+	f.plans["consumer"] = plan(a, b)
+	policy := EmptyPolicy()
+	policy.Plugins["consumer"] = Entry{Source: "registry"}
+	p, e := f.prepare(t, root, policy, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	applyPrepared(t, root, p)
+	if code, msg := cli(t, root, nil, "remove", "consumer"); code != 0 {
+		t.Fatal(msg)
+	}
+	if code, msg := cli(t, root, nil, "remove", "provider"); code != 0 {
+		t.Fatal("stale parent blocks provider removal", msg)
+	}
+}
+
+func TestCLIRemoveMissingOwnedPlugin(t *testing.T) {
+	root := t.TempDir()
+	path := pluginFile(t, root, "gone.s2sp", "gone", "1.0.0", false)
+	own(t, root)
+	os.Remove(path)
+	if code, msg := cli(t, root, nil, "remove", "gone"); code != 0 {
+		t.Fatal("missing owned entry cannot be removed", msg)
+	}
+	got, e := Discover(root)
+	if e != nil || len(got) != 0 {
 		t.Fatal(got, e)
 	}
 }

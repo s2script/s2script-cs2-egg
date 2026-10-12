@@ -236,19 +236,15 @@ func RunCLI(ctx context.Context, args []string, lookup func(string) (string, boo
 			// Required interface providers need the registry dependency checker. A
 			// direct artifact move must not disable a provider under active consumers.
 			if want {
-				m, e := ParseManifest(p.Manifest)
-				if e != nil {
+				if e = checkDirectEnable(ctx, cfg, p.Name, installed); e != nil {
 					return fail(e)
 				}
-				if len(m.PluginDependencies) > 0 {
-					return fail(ErrDependencyEvidenceUnavailable)
-				}
-			}
-			if !want {
-				if e = checkRemoval(*p, installed); e != nil {
+			} else {
+				if e = checkDirectRemoval(ctx, cfg, *p, installed, true); e != nil {
 					return fail(e)
 				}
 			}
+
 			old, _ := Target(p.Filename, p.Enabled)
 			p.Enabled = want
 			target, _ := Target(p.Filename, want)
@@ -276,7 +272,7 @@ func RunCLI(ctx context.Context, args []string, lookup func(string) (string, boo
 			if !p.Managed || p.Verification != "verified" {
 				return fail(errors.New("plugin is not owned; manual/local files are preserved"))
 			}
-			if e = checkRemoval(p, installed); e != nil {
+			if e = checkDirectRemoval(ctx, cfg, p, installed, false); e != nil {
 				return fail(e)
 			}
 			if p.LastCheckStatus != "missing" {
@@ -284,6 +280,15 @@ func RunCLI(ctx context.Context, args []string, lookup func(string) (string, boo
 				changes = append(changes, artifact.Change{Path: "game/csgo/" + target, Remove: true})
 			}
 			installed = append(installed[:index], installed[index+1:]...)
+			for i := range installed {
+				parents := []string{}
+				for _, parent := range installed[i].Parents {
+					if parent != name {
+						parents = append(parents, parent)
+					}
+				}
+				installed[i].Parents = parents
+			}
 			lock, e := StageLock(stage, installed)
 			if e != nil {
 				return fail(e)
@@ -350,47 +355,6 @@ func stageInstalled(stage, root, relative, digest string) (string, error) {
 	path := filepath.Join(stage, "plugin.s2sp")
 	e = os.WriteFile(path, b, 0600)
 	return path, e
-}
-func checkRemoval(candidate Installed, all []Installed) error {
-	if len(candidate.Parents) > 0 {
-		return errors.New("plugin is still needed by another installed plugin")
-	}
-	provided, e := ParseManifest(candidate.Manifest)
-	if e != nil {
-		return e
-	}
-	for _, p := range all {
-		if p.Name == candidate.Name || p.LastCheckStatus == "missing" {
-			continue
-		}
-		m, e := ParseManifest(p.Manifest)
-		if e != nil {
-			return e
-		}
-		for name := range m.PluginDependencies {
-			_, published := provided.Publishes[name]
-			if name == candidate.Name || published {
-				return fmt.Errorf("plugin is still needed by %s", p.Name)
-			}
-			known := false
-			for _, provider := range all {
-				pm, e := ParseManifest(provider.Manifest)
-				if e != nil {
-					return e
-				}
-				if provider.Name == name {
-					known = true
-				}
-				if _, ok := pm.Publishes[name]; ok {
-					known = true
-				}
-			}
-			if !known {
-				return ErrDependencyEvidenceUnavailable
-			}
-		}
-	}
-	return nil
 }
 
 // PanelOverride uses only explicit panel choices. Effective bundled defaults

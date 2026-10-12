@@ -16,8 +16,25 @@ import (
 const LockFilename = "s2script-plugins.lock.json"
 
 type Lock struct {
-	SchemaVersion int         `json:"schema_version"`
-	Plugins       []Installed `json:"plugins"`
+	SchemaVersion int            `json:"schema_version"`
+	Plugins       []Installed    `json:"plugins"`
+	RegistryRoots []RootEvidence `json:"registry_roots,omitempty"`
+}
+
+// RootEvidence records a verified plan, including non-artifact bundle roots.
+// It is evidence about a resolution, never an invented installed ZIP manifest.
+type RootEvidence struct {
+	Name     string       `json:"name"`
+	Version  string       `json:"version"`
+	Range    string       `json:"range"`
+	With     []string     `json:"with"`
+	Registry string       `json:"registry"`
+	Members  []RootMember `json:"members"`
+}
+type RootMember struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
 }
 
 func validateLock(l Lock) error {
@@ -55,6 +72,42 @@ func validateLock(l Lock) error {
 			}
 		}
 	}
+	roots := map[string]bool{}
+	for _, root := range l.RegistryRoots {
+		if !validName(root.Name) || roots[root.Name] || !ExactVersion(root.Version) || root.Members == nil || len(root.Members) == 0 || root.With == nil {
+			return errors.New("invalid registry root evidence")
+		}
+		roots[root.Name] = true
+		if v, e := NormalizeVersion(root.Range); e != nil || v != root.Range || !satisfies(root.Version, v) {
+			return errors.New("invalid registry root selector")
+		}
+		if _, e := safeRegistryURL(root.Registry); e != nil {
+			return e
+		}
+		members := map[string]bool{}
+		for _, member := range root.Members {
+			if !validName(member.Name) || members[member.Name] || !ExactVersion(member.Version) || !validHash(member.SHA256) {
+				return errors.New("invalid registry member evidence")
+			}
+			members[member.Name] = true
+			found := false
+			for _, p := range l.Plugins {
+				if p.Name == member.Name && p.Version == member.Version && p.SHA256 == member.SHA256 && p.Source == "registry" && p.Managed && p.Verification == "verified" {
+					found = true
+				}
+			}
+			if !found {
+				return errors.New("registry member evidence has no matching installed artifact")
+			}
+		}
+		with := map[string]bool{}
+		for _, name := range root.With {
+			if !validName(name) || with[name] || !members[name] {
+				return errors.New("invalid registry optional member evidence")
+			}
+			with[name] = true
+		}
+	}
 	return nil
 }
 func validateLockFields(raw []byte) error {
@@ -69,6 +122,30 @@ func validateLockFields(raw []byte) error {
 	for _, entry := range entries {
 		if _, e = canonicalObject[Installed](entry); e != nil {
 			return e
+		}
+	}
+	var roots []json.RawMessage
+	if raw, ok := object["registry_roots"]; ok {
+		if string(raw) == "null" {
+			return errors.New("null registry roots")
+		}
+		if e = json.Unmarshal(raw, &roots); e != nil {
+			return e
+		}
+	}
+	for _, raw := range roots {
+		root, e := canonicalObject[RootEvidence](raw)
+		if e != nil {
+			return e
+		}
+		var members []json.RawMessage
+		if e = json.Unmarshal(root["members"], &members); e != nil {
+			return e
+		}
+		for _, member := range members {
+			if _, e = canonicalObject[RootMember](member); e != nil {
+				return e
+			}
 		}
 	}
 	return nil
@@ -96,9 +173,14 @@ func ReadLock(root string) (Lock, error) {
 // StageLock returns a server-root-relative change. The caller owns runtimelease,
 // artifact.Acquire/Recover and the combined artifact.Apply transaction.
 func StageLock(stage string, plugins []Installed) (artifact.Change, error) {
+	// Direct CLI mutation deliberately invalidates prior plan membership. A fresh
+	// online reconcile re-establishes it before registry-outage fallback is allowed.
+	return StageLockWithRoots(stage, plugins, nil)
+}
+func StageLockWithRoots(stage string, plugins []Installed, roots []RootEvidence) (artifact.Change, error) {
 	p := append([]Installed{}, plugins...)
 	sort.Slice(p, func(i, j int) bool { return p[i].Name < p[j].Name })
-	l := Lock{1, p}
+	l := Lock{SchemaVersion: 1, Plugins: p, RegistryRoots: roots}
 	if e := validateLock(l); e != nil {
 		return artifact.Change{}, e
 	}

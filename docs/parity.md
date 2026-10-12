@@ -1,6 +1,6 @@
 # Implementation status
 
-This file records the configuration and preparation-library milestone. The approved design remains prospective wherever a behavior is marked planned. Unit tests and generated JSON checks do not establish live-server or panel acceptance.
+This file records the configuration, plugin inventory and reconciliation-library milestone. The approved design remains prospective wherever a behavior is marked planned. Unit tests and generated JSON checks do not establish live-server or panel acceptance.
 
 | Capability | Status / evidence |
 | --- | --- |
@@ -13,9 +13,9 @@ This file records the configuration and preparation-library milestone. The appro
 | SteamCMD install/update/validation | Library implemented; fake-process arguments/build/cancellation tests; CLI wiring/live game installation later |
 | Metamod/S2Script preparation, version/channel pins, compatibility | Implemented as staged changes; official publisher digests, immutable source/API evidence, native pair/game-package checks and retained state/cache fallback; live loading and CLI integration later |
 | Verified artifact download/extraction and recoverable application | Implemented; bounded HTTPS/hash/archive handling, descriptor-safe paths and caller-held lock; consumers must Recover before launch |
-| Installed-plugin inventory and startup checks of every entry | Planned; configuration has inventory path and explicit panel override map |
-| Registry/release/local plugin discovery, dependency resolution, pins | Planned |
-| Disabled plugin updates and persistent placement/config/data | Planned |
+| Installed-plugin inventory and startup checks of every entry | Inventory/CLI implemented; reconciliation library checks every installed identity, including disabled/pinned/local/missing entries; startup invocation awaits Task6 |
+| Registry/release/local plugin discovery, dependency resolution, pins | Implemented as staged changes with published-interface contracts, verified bundle root/member evidence and policy-checked outage fallback; executable resolver wiring awaits Task6; successful live registry acceptance not established |
+| Disabled plugin updates and persistent placement/config/data | Implemented in preparation and direct CLI moves; TLS/ZIP/transaction tests cover disabled updates, shared/exclusive dependencies, immutable pins, local preservation and config continuity |
 | HUD support and MultiAddonManager setup | Preparation library enforces minimum installed CS2 build, stages compatible helper and merges addon settings; live server/client rendering not tested |
 | Lifecycle webhook events and delivery | Planned for the first runnable server milestone; URL/event/timing validation only; no webhook is contacted now |
 | Optional node daemon and narrow local protocol | Planned; no Docker socket or Wings admin credential in the container |

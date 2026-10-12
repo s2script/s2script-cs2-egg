@@ -33,6 +33,69 @@
         },
         "allOf": [{"if": {"properties": {"managed": {"const": true}}}, "then": {"properties": {"source": {"enum": ["release", "registry"]}, "verification": {"const": "verified"}}}}]
       }
+    },
+    "registry_roots": {
+      "type": "array",
+      "description": "Verified public Plan root/member evidence; invalidated by direct artifact mutations.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "version",
+          "range",
+          "with",
+          "registry",
+          "members"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "range": {
+            "type": "string"
+          },
+          "with": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "registry": {
+            "type": "string",
+            "format": "uri"
+          },
+          "members": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "version",
+                "sha256"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

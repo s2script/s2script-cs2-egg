@@ -251,3 +251,25 @@ func TestAllowMissingInventoryUnderResolvedInRootSymlink(t *testing.T) {
 		t.Fatalf("rejected contained missing inventory: %v", err)
 	}
 }
+
+func TestReviewedOnlyConfigPrecedence(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "egg"), 0700)
+	os.WriteFile(filepath.Join(root, "egg/server.json"), []byte(`{"plugins":{"reviewed_only":true}}`), 0600)
+	cfg, e := config.LoadServer(root, lookup(map[string]string{"ALLOW_TOKENLESS": "1"}))
+	if e != nil {
+		t.Fatal(e)
+	}
+	raw, _ := json.Marshal(cfg)
+	if !strings.Contains(string(raw), `"reviewed_only":true`) {
+		t.Fatal("saved reviewed-only lost")
+	}
+	cfg, e = config.LoadServer(root, lookup(map[string]string{"ALLOW_TOKENLESS": "1", "S2SCRIPT_REVIEWED_ONLY": "0"}))
+	raw, _ = json.Marshal(cfg)
+	if e != nil || !strings.Contains(string(raw), `"reviewed_only":false`) {
+		t.Fatal("environment override lost", e)
+	}
+	if _, e = config.LoadServer(root, lookup(map[string]string{"ALLOW_TOKENLESS": "1", "S2SCRIPT_REVIEWED_ONLY": "true"})); e == nil {
+		t.Fatal("invalid reviewed-only accepted")
+	}
+}
