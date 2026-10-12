@@ -24,3 +24,9 @@ egg-check:
 
 clean:
 	rm -rf bin
+
+# Install tests/schema-requirements.txt in an isolated environment first.
+SCHEMA_PYTHON ?= python3
+.PHONY: schema-check
+schema-check:
+	S2_SCHEMA_PYTHON=$(SCHEMA_PYTHON) $(GO) test ./internal/releasecontract ./internal/server ./internal/node ./internal/selfupdate -run "Schema|BotInterface" -count=1

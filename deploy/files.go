@@ -12,3 +12,6 @@ var HelperUnit []byte
 
 //go:embed s2node-guard.service
 var GuardUnit []byte
+
+//go:embed s2node-launcher.conf
+var LauncherDropIn []byte

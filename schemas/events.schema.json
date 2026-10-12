@@ -1,0 +1,177 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "enum": [
+        1,
+        2
+      ]
+    },
+    "id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "server_id": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "node_id": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "run_id": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "correlation_id": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "severity": {
+      "enum": [
+        "info",
+        "warning",
+        "error",
+        ""
+      ]
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "details": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "origin": {
+      "const": "host"
+    },
+    "producer": {
+      "enum": [
+        "backup",
+        "guard",
+        "observability",
+        "cleanup",
+        "selfupdate"
+      ]
+    },
+    "action_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    },
+    "related_run_id": {
+      "type": "string",
+      "maxLength": 128
+    }
+  },
+  "required": [
+    "version",
+    "id",
+    "type",
+    "server_id",
+    "run_id",
+    "correlation_id",
+    "severity",
+    "at"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Runtime v1 and host v2 event envelopes",
+  "oneOf": [
+    {
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "run_id": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "server_id": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "origin"
+            ]
+          },
+          {
+            "required": [
+              "producer"
+            ]
+          },
+          {
+            "required": [
+              "action_id"
+            ]
+          },
+          {
+            "required": [
+              "related_run_id"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "origin": {
+          "const": "host"
+        },
+        "run_id": {
+          "const": ""
+        },
+        "type": {
+          "enum": [
+            "backup",
+            "restore",
+            "guard",
+            "crash.bundle",
+            "cleanup",
+            "node.update"
+          ]
+        },
+        "node_id": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        }
+      },
+      "required": [
+        "origin",
+        "producer",
+        "action_id",
+        "node_id"
+      ]
+    }
+  ],
+  "$comment": "Host producer/type/scope and action_id==correlation_id are validated by the node. Wire protocol remains version 1. Source timestamps and claimed container fields are not host attestation."
+}

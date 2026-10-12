@@ -296,6 +296,9 @@ func (c *Core) serve(ctx context.Context, l *net.UnixListener, id string, uid ui
 					if admin {
 						available = append(available, protocol.CapOperations)
 						c.mu.Lock()
+						if c.actions[protocol.CapProjectUpdate] != nil {
+							available = append(available, protocol.CapProjectUpdate)
+						}
 						if c.actions[protocol.CapGuardAdmin] != nil {
 							available = append(available, protocol.CapGuardAdmin)
 						}
@@ -311,7 +314,7 @@ func (c *Core) serve(ctx context.Context, l *net.UnixListener, id string, uid ui
 						available = append(available, protocol.CapEvents)
 						c.mu.Lock()
 						for cap := range c.actions {
-							if cap != protocol.CapGuardAdmin && cap != protocol.CapBackupAdmin && cap != protocol.CapOperations && cap != protocol.CapUpdateExecute && cap != protocol.CapUpdateAdmin {
+							if cap != protocol.CapProjectUpdate && cap != protocol.CapGuardAdmin && cap != protocol.CapBackupAdmin && cap != protocol.CapOperations && cap != protocol.CapUpdateExecute && cap != protocol.CapUpdateAdmin {
 								available = append(available, cap)
 							}
 						}
@@ -391,7 +394,7 @@ func (c *Core) handle(ctx context.Context, id string, admin bool, caps map[strin
 		return nil, errors.New("capability was not negotiated")
 	}
 	switch m.Type {
-	case protocol.CapGuardAdmin, protocol.CapBackupAdmin:
+	case protocol.CapProjectUpdate, protocol.CapGuardAdmin, protocol.CapBackupAdmin:
 		if !admin {
 			return nil, errors.New("administrator socket required")
 		}

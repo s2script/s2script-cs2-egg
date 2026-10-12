@@ -15,6 +15,7 @@ const Version = 1
 const MaxFrame = 1 << 20
 const Timeout = 5 * time.Second
 const (
+	CapProjectUpdate = "project.update"
 	CapGuardAdmin    = "guard.admin"
 	CapBackupAdmin   = "backup.admin"
 	CapOperations    = "operations.admin"

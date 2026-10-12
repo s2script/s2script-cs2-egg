@@ -19,6 +19,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/deploy"
 	"github.com/s2script/s2script-cs2-egg/internal/alerts"
 	"github.com/s2script/s2script-cs2-egg/internal/backup"
+	"github.com/s2script/s2script-cs2-egg/internal/buildinfo"
 	"github.com/s2script/s2script-cs2-egg/internal/cache"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
@@ -29,6 +30,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/redaction"
 	"github.com/s2script/s2script-cs2-egg/internal/scheduler"
+	"github.com/s2script/s2script-cs2-egg/internal/selfupdate"
 	"github.com/s2script/s2script-cs2-egg/internal/shared"
 	"github.com/s2script/s2script-cs2-egg/internal/wings"
 	"github.com/s2script/s2script-cs2-egg/internal/workshop"
@@ -41,6 +43,9 @@ func run(args []string, out, errs io.Writer) int {
 		return 2
 	}
 	command := args[0]
+	if strings.HasPrefix(command, "project-") {
+		return projectCLI(command, args[1:], out, errs)
+	}
 	if strings.HasPrefix(command, "guard-") && command != "guard-helper-run" && command != "guard-helper-preview" {
 		return guardCLI(command, args[1:], out, errs)
 	}
@@ -257,6 +262,26 @@ func run(args []string, out, errs io.Writer) int {
 		fmt.Fprintln(out, "operator must provision systemd supplementary groups and ReadWritePaths for egg directories; doctor does not change permissions or acquire game locks")
 		return 0
 	case "run":
+		if e = validateManagedPolicy(*path, cfg); e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		restart := make(chan struct{}, 1)
+		if cfg.ProjectUpdates.Enabled {
+			m := &selfupdate.Module{Root: filepath.Join(cfg.StateDir, "project-updates"), Config: cfg.ProjectUpdates, Current: buildinfo.Version, Manager: projectManager(cfg), Secrets: redaction.Secrets(cfg.Webhook.URL)}
+			if cfg.ProjectUpdates.Activate {
+				m.RequestRestart = func() {
+					select {
+					case restart <- struct{}{}:
+					default:
+					}
+				}
+			}
+			if e = core.AddModule(m, []string{protocol.CapProjectUpdate, nodetypes.GrantOperationalEvents}); e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+		}
 		if cfg.Guard.Enabled {
 			m := &guard.Module{Root: filepath.Join(cfg.StateDir, "guard"), Config: cfg.Guard, Secrets: redaction.Secrets(cfg.Webhook.URL)}
 			if e = core.AddModule(m, []string{protocol.CapGuardAdmin, nodetypes.GrantOperationalEvents}); e != nil {
@@ -345,12 +370,72 @@ func run(args []string, out, errs io.Writer) int {
 				return 1
 			}
 		}
-		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		operator, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		ctx, cancel := context.WithCancel(operator)
 		defer cancel()
-		if e = core.Run(ctx); e != nil {
+		done := make(chan error, 1)
+		go func() { done <- core.Run(ctx) }()
+		select {
+		case e = <-done:
+			if e != nil {
+				fmt.Fprintln(errs, "node stopped:", e)
+				return 1
+			}
+			return 0
+		case <-core.Ready():
+			required := append([]string(nil), cfg.ProjectUpdates.RequiredModules...)
+			if cfg.ProjectUpdates.Enabled {
+				required = append(required, "selfupdate")
+			}
+			e = core.InitializationReady(required)
+			if e == nil {
+				e = selfupdate.ReportReady()
+			}
+			if e != nil {
+				fmt.Fprintln(errs, "node initialization:", e)
+				cancel()
+				select {
+				case <-done:
+				case <-time.After(35 * time.Second):
+				}
+				return 1
+			}
+		case <-operator.Done():
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(35 * time.Second):
+			}
+			return 0
+		}
+		activating := false
+		select {
+		case e = <-done:
+			if e != nil {
+				fmt.Fprintln(errs, "node stopped:", e)
+				return 1
+			}
+			return 0
+		case <-operator.Done():
+		case <-restart:
+			activating = true
+		}
+		cancel()
+		select {
+		case e = <-done:
+		case <-time.After(35 * time.Second):
+			fmt.Fprintln(errs, "node quiescence timed out; activation not requested")
+			return selfupdate.FailureExit
+		}
+		if e != nil {
 			fmt.Fprintln(errs, "node stopped:", e)
 			return 1
 		}
+		if activating && operator.Err() == nil {
+			return selfupdate.ActivationExit
+		}
+
 	}
 	return 0
 }
@@ -390,6 +475,15 @@ func install(dir string) error {
 	if closeErr := unit.Close(); e == nil {
 		e = closeErr
 	}
+	if e != nil {
+		return e
+	}
+	launcherFile, e := os.OpenFile(filepath.Join(abs, "s2node-launcher.conf"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if e != nil {
+		return e
+	}
+	_, e = launcherFile.Write(deploy.LauncherDropIn)
+	e = errors.Join(e, launcherFile.Close())
 	if e != nil {
 		return e
 	}

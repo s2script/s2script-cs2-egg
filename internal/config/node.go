@@ -40,20 +40,21 @@ type SharedNode struct {
 	ReserveBytes uint64 `json:"reserve_bytes"`
 }
 type Node struct {
-	Guard         GuardNode     `json:"guard"`
-	Backup        BackupNode    `json:"backup"`
-	Observability Observability `json:"observability"`
-	Cache         CacheNode     `json:"cache"`
-	Workshop      WorkshopNode  `json:"workshop"`
-	Updates       NodeUpdates   `json:"updates"`
-	Shared        SharedNode    `json:"shared"`
-	SchemaVersion int           `json:"schema_version"`
-	ID            string        `json:"id"`
-	StateDir      string        `json:"state_dir"`
-	AdminSocket   string        `json:"admin_socket"`
-	Servers       []NodeServer  `json:"servers"`
-	Limits        NodeLimits    `json:"limits"`
-	Webhook       Webhook       `json:"webhook"`
+	ProjectUpdates ProjectUpdates `json:"project_updates"`
+	Guard          GuardNode      `json:"guard"`
+	Backup         BackupNode     `json:"backup"`
+	Observability  Observability  `json:"observability"`
+	Cache          CacheNode      `json:"cache"`
+	Workshop       WorkshopNode   `json:"workshop"`
+	Updates        NodeUpdates    `json:"updates"`
+	Shared         SharedNode     `json:"shared"`
+	SchemaVersion  int            `json:"schema_version"`
+	ID             string         `json:"id"`
+	StateDir       string         `json:"state_dir"`
+	AdminSocket    string         `json:"admin_socket"`
+	Servers        []NodeServer   `json:"servers"`
+	Limits         NodeLimits     `json:"limits"`
+	Webhook        Webhook        `json:"webhook"`
 }
 
 // Format uses the existing Webhook JSON redactor even for nested settings.
@@ -197,6 +198,9 @@ func (n *Node) Validate() error {
 		if !ids[id] {
 			return errors.New("guard allocation references unregistered server")
 		}
+	}
+	if err := n.ProjectUpdates.Validate(n.StateDir); err != nil {
+		return err
 	}
 	return n.validateStores()
 }

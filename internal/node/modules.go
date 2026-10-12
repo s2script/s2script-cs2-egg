@@ -75,7 +75,7 @@ func (c *Core) AddModule(m Module, grants []string) error {
 }
 func knownCapability(cap string) bool {
 	switch cap {
-	case protocol.CapGuardAdmin, protocol.CapBackupAdmin, protocol.CapOperations, protocol.CapEvents, protocol.CapStatus, protocol.CapPrepare, protocol.CapCache, protocol.CapWorkshop, protocol.CapRestart, protocol.CapUpdateControl, protocol.CapUpdateExecute, protocol.CapUpdateAdmin:
+	case protocol.CapProjectUpdate, protocol.CapGuardAdmin, protocol.CapBackupAdmin, protocol.CapOperations, protocol.CapEvents, protocol.CapStatus, protocol.CapPrepare, protocol.CapCache, protocol.CapWorkshop, protocol.CapRestart, protocol.CapUpdateControl, protocol.CapUpdateExecute, protocol.CapUpdateAdmin:
 		return true
 	}
 	return false
@@ -180,4 +180,24 @@ func (c *Core) invoke(ctx context.Context, s Server, cap string, msg protocol.Me
 		m.mu.Unlock()
 	}
 	return
+}
+
+// InitializationReady checks initialization only, without depending on external
+// Steam, Wings, Discord or game availability after a module has started.
+func (c *Core) InitializationReady(names []string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, name := range names {
+		m := c.modules[name]
+		if m == nil {
+			return fmt.Errorf("required module %s is not configured", name)
+		}
+		m.mu.Lock()
+		failed := m.health.Status == "failed"
+		m.mu.Unlock()
+		if failed {
+			return fmt.Errorf("required module %s failed initialization", name)
+		}
+	}
+	return nil
 }

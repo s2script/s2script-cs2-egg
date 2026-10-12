@@ -18,6 +18,7 @@ import (
 	node "github.com/s2script/s2script-cs2-egg/internal/nodetypes"
 	"github.com/s2script/s2script-cs2-egg/internal/privateops"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
+	"github.com/s2script/s2script-cs2-egg/internal/releasecontract"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
 	"github.com/s2script/s2script-cs2-egg/internal/volumehelper"
 	"github.com/s2script/s2script-cs2-egg/internal/workshop"
@@ -260,6 +261,29 @@ func helperSession(ctx context.Context, conn net.Conn, c HelperConfig) error {
 	first, e := protocol.Read(conn)
 	if e != nil {
 		return e
+	}
+	if first.Version == protocol.Version && first.ID == "discovery" && first.Type == "info" {
+		if protocol.Decode(first.Payload, &struct{}{}) != nil {
+			return errors.New("invalid discovery request")
+		}
+		h := releasecontract.Helper{DiscoveryVersion: 1, Protocol: releasecontract.Range{Min: 1, Max: 1}, Provides: []string{}, Requires: map[string][]string{}}
+		if c.SharedRoot != "" {
+			h.Provides = append(h.Provides, "shared.attach.v1")
+		}
+		if c.WorkshopRoot != "" {
+			h.Provides = append(h.Provides, "workshop.attach.v1")
+		}
+		if c.Operations != nil {
+			h.Provides = append(h.Provides, "operations.private.v1")
+		}
+		if c.Backup != nil {
+			h.Provides = append(h.Provides, "backup.catalog.v1")
+		}
+		b, err := json.Marshal(h)
+		if err != nil {
+			return err
+		}
+		return protocol.Write(conn, protocol.Message{Version: protocol.Version, ID: "discovery", Type: "info", Payload: b})
 	}
 	if first.Version == protocol.Version && first.ID == "backup" && first.Type == "begin" {
 		if c.Backup == nil {

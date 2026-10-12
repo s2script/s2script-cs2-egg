@@ -59,5 +59,17 @@
     "helper_uid": 2002,
     "policies": {},
     "allocations": {}
+  },
+  "project_updates": {
+    "enabled": false,
+    "schedule": false,
+    "activate": false,
+    "channel": "stable",
+    "version": "latest",
+    "allow_downgrade": false,
+    "interval_seconds": 86400,
+    "startup_seconds": 60,
+    "root": "/var/lib/s2node/node-releases",
+    "required_modules": []
   }
 }

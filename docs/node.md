@@ -79,3 +79,7 @@ Opt-in [logging and crash capture](logging.md), [private metrics](metrics.md), a
 ## Optional guard
 
 See [guard setup and administration](guard.md) for observation, typed kicks, and the separate opt-in nftables helper. Ordinary node service privileges do not change.
+
+## Project updates and integrations
+
+[Project release updates](project-updates.md) are disabled by default; the optional managed launcher retains a rollback binary. [Integration contracts](integrations.md) document the private typed API and event schemas for a future Discord companion.

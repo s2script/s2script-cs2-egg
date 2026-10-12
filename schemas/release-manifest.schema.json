@@ -1,0 +1,297 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "repository": {
+      "const": "s2script/s2script-cs2-egg"
+    },
+    "tag": {
+      "type": "string",
+      "pattern": "^v",
+      "maxLength": 129
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$"
+    },
+    "channel": {
+      "enum": [
+        "stable",
+        "prerelease"
+      ]
+    },
+    "license": {
+      "const": "GPL-3.0-or-later"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "commit_url": {
+          "type": "string",
+          "pattern": "^https://github.com/s2script/s2script-cs2-egg/commit/[a-f0-9]{40}$"
+        },
+        "archive": {
+          "$ref": "#/$defs/descriptor"
+        }
+      },
+      "required": [
+        "revision",
+        "commit_url",
+        "archive"
+      ]
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://github.com/s2script/s2script-cs2-egg/releases/download/"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1073741824
+          },
+          "component": {
+            "enum": [
+              "s2node",
+              "s2egg"
+            ]
+          },
+          "os": {
+            "const": "linux"
+          },
+          "arch": {
+            "const": "amd64"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "sha256",
+          "size",
+          "component",
+          "os",
+          "arch"
+        ]
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "egg": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "deployment": {
+          "$ref": "#/$defs/descriptor"
+        }
+      },
+      "required": [
+        "egg",
+        "deployment"
+      ]
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node_container": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "$ref": "#/$defs/range"
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+                "maxLength": 80
+              },
+              "uniqueItems": true,
+              "maxItems": 128
+            }
+          },
+          "required": [
+            "protocol",
+            "capabilities"
+          ]
+        },
+        "helper": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "discovery_version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "protocol": {
+              "$ref": "#/$defs/range"
+            },
+            "provides": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+                "maxLength": 80
+              },
+              "uniqueItems": true,
+              "maxItems": 128
+            },
+            "requires_by_operation": {
+              "type": "object",
+              "maxProperties": 128,
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+                "maxLength": 80
+              },
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+                  "maxLength": 80
+                },
+                "uniqueItems": true,
+                "maxItems": 128,
+                "minItems": 1
+              }
+            }
+          },
+          "required": [
+            "discovery_version",
+            "protocol",
+            "provides",
+            "requires_by_operation"
+          ]
+        },
+        "launcher_min": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": {
+              "$ref": "#/$defs/range"
+            },
+            "write": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          },
+          "required": [
+            "read",
+            "write"
+          ]
+        }
+      },
+      "required": [
+        "node_container",
+        "helper",
+        "launcher_min",
+        "state"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "repository",
+    "tag",
+    "version",
+    "channel",
+    "license",
+    "source",
+    "artifacts",
+    "distribution",
+    "compatibility"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/s2script/s2script-cs2-egg/schemas/release-manifest.schema.json",
+  "title": "S2Script release manifest v1",
+  "$comment": "The shared releasecontract validator additionally checks canonical SemVer, tag/channel consistency, exact asset names/URLs, digest provenance, unique components and compatibility range relationships.",
+  "$defs": {
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://github.com/s2script/s2script-cs2-egg/releases/download/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "sha256",
+        "size"
+      ]
+    }
+  }
+}
