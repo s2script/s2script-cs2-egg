@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,7 +25,10 @@ import (
 type GameProvider interface {
 	Prepare(context.Context, config.Server) (handled bool, err error)
 }
-type Options struct{ GameProvider GameProvider }
+type Options struct {
+	GameProvider    GameProvider
+	ControlProvider ControlProvider
+}
 type preparationRunKey struct{}
 
 // PreparationRunID identifies the managed runtime; offline preparations use a separate run.
@@ -117,6 +121,19 @@ func prepareWith(ctx context.Context, cfg config.Server, emit emitFunc, o prepOp
 		return nil, e
 	}
 	versions["steam_build"] = build
+	if f, err := os.Open(filepath.Join(cfg.Root, ".s2shared.json")); err == nil {
+		var local struct {
+			Generation struct {
+				ID string `json:"id"`
+			} `json:"generation"`
+		}
+		err = json.NewDecoder(io.LimitReader(f, 64<<20)).Decode(&local)
+		f.Close()
+		if err != nil {
+			return nil, errors.New("invalid shared generation status")
+		}
+		versions["shared_generation"] = local.Generation.ID
+	}
 	return versions, nil
 }
 

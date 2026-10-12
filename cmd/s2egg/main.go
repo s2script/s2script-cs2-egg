@@ -105,6 +105,7 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 			}
 			sink = client.Route(dispatcher)
 			options.GameProvider = client
+			options.ControlProvider = client
 		}
 		code, e := runtime.Run(context.Background(), server, sink, os.Stdin, out, errs, options)
 		if e != nil {
@@ -146,6 +147,7 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 		if connectErr == nil {
 			defer client.Close()
 			options.GameProvider = client
+			options.ControlProvider = client
 		}
 		if e := runtime.Prepare(ctx, server, options); e != nil {
 			fmt.Fprintln(errs, "preparation error:", e)

@@ -15,12 +15,15 @@ const Version = 1
 const MaxFrame = 1 << 20
 const Timeout = 5 * time.Second
 const (
-	CapStatus   = "status"
-	CapEvents   = "events"
-	CapPrepare  = "game.prepare"
-	CapCache    = "cache"
-	CapWorkshop = "workshop"
-	CapRestart  = "restart.schedule"
+	CapStatus        = "status"
+	CapEvents        = "events"
+	CapPrepare       = "game.prepare"
+	CapCache         = "cache"
+	CapWorkshop      = "workshop"
+	CapRestart       = "restart.schedule"
+	CapUpdateControl = "update.control"
+	CapUpdateExecute = "update.execute"
+	CapUpdateAdmin   = "update.admin"
 )
 
 type Message struct {
@@ -78,6 +81,23 @@ type WorkshopRequest struct {
 type WorkshopResult struct {
 	State string `json:"state"`
 }
+type UpdateControl struct {
+	ActionID  string    `json:"action_id,omitempty"`
+	RunID     string    `json:"run_id,omitempty"`
+	Target    string    `json:"target,omitempty"`
+	ExpiresAt time.Time `json:"expires_at,omitempty"`
+}
+type ControlRequest struct {
+	RunID string `json:"run_id"`
+}
+type ExecuteUpdate struct {
+	JobID string `json:"job_id"`
+}
+type UpdateAdmin struct {
+	Operation  string `json:"operation"`
+	JobID      string `json:"job_id,omitempty"`
+	AllowStart bool   `json:"allow_start,omitempty"`
+}
 type RestartRequest struct {
 	Policy          string `json:"policy"`
 	MaxDelaySeconds int    `json:"max_delay_seconds"`
@@ -85,6 +105,9 @@ type RestartRequest struct {
 	WindowEnd       string `json:"window_end,omitempty"`
 }
 type RestartResult struct {
+	Generation string `json:"generation,omitempty"`
+	BuildID    string `json:"build_id,omitempty"`
+	State      string `json:"state,omitempty"`
 	ScheduleID string `json:"schedule_id"`
 }
 

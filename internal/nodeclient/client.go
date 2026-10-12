@@ -213,3 +213,16 @@ func Optional(ctx context.Context, path string, fallback events.Sink) (events.Si
 // ServerID is authoritative only for this accepted, configured socket. The CLI
 // uses it for the active run without rewriting the saved standalone identity.
 func (c *Client) ServerID() string { c.mu.Lock(); defer c.mu.Unlock(); return c.identity.ServerID }
+
+// Control reports current evidence before requesting a run-bound host intent.
+func (c *Client) Control(ctx context.Context, s server.Status) (protocol.UpdateControl, error) {
+	var out protocol.UpdateControl
+	if !c.Has(protocol.CapUpdateControl) {
+		return out, nil
+	}
+	if err := c.ReportStatus(ctx, s); err != nil {
+		return out, err
+	}
+	err := c.call(ctx, protocol.CapUpdateControl, protocol.CapUpdateControl, protocol.ControlRequest{RunID: s.RunID}, &out)
+	return out, err
+}

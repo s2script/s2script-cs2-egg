@@ -25,11 +25,19 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/processgroup"
+	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
 )
 
 type emitFunc func(string, string, map[string]string)
 type runOptions struct {
+	latest          func(context.Context, string) (string, error)
+	updatePoll      time.Duration
+	control         ControlProvider
+	externalLease   bool
+	externalSignals bool
+	updates         *updateSession
+
 	prepare                 func(context.Context, config.Server, emitFunc) (map[string]string, error)
 	poll, timeout, shutdown time.Duration
 }
@@ -78,9 +86,13 @@ func homeEnv(root string) []string {
 // caller's descriptor remains untouched. Sink must honor Publish cancellation.
 // Linux child-subreaper mode is process-wide; reaping is restricted to this PGID.
 func Run(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.Reader, stdout, stderr io.Writer, options Options) (int, error) {
-	return runWith(ctx, cfg, sink, stdin, stdout, stderr, runOptions{prepare: func(ctx context.Context, cfg config.Server, emit emitFunc) (map[string]string, error) {
+	o := runOptions{prepare: func(ctx context.Context, cfg config.Server, emit emitFunc) (map[string]string, error) {
 		return prepareRuntimeOptions(ctx, cfg, emit, options)
-	}, poll: time.Duration(cfg.Readiness.PollIntervalSeconds) * time.Second, timeout: time.Duration(cfg.Readiness.TimeoutSeconds) * time.Second, shutdown: 10 * time.Second})
+	}, control: options.ControlProvider, poll: time.Duration(cfg.Readiness.PollIntervalSeconds) * time.Second, timeout: time.Duration(cfg.Readiness.TimeoutSeconds) * time.Second, shutdown: 10 * time.Second}
+	if cfg.Updates.Enabled {
+		return runSupervisor(ctx, cfg, sink, stdin, stdout, stderr, o, options.GameProvider)
+	}
+	return runWith(ctx, cfg, sink, stdin, stdout, stderr, o)
 }
 func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.Reader, stdout, stderr io.Writer, o runOptions) (code int, err error) {
 	for _, arg := range cfg.Launch.ExtraArgs {
@@ -90,32 +102,36 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 			return 1, errors.New("CUSTOM_PARAMS cannot override managed allocation or Steam account arguments")
 		}
 	}
-	signalCtx, cancelSignal := context.WithCancelCause(ctx)
-	defer cancelSignal(nil)
-	signals := make(chan os.Signal, 2)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(signals)
-	signalDone := make(chan struct{})
-	defer func() { cancelSignal(nil); <-signalDone }()
-	go func() {
-		defer close(signalDone)
-		select {
-		case sig := <-signals:
-			cancelSignal(signalCause{sig.(syscall.Signal)})
-		case <-signalCtx.Done():
-		}
-	}()
-	ctx = signalCtx
+	if !o.externalSignals {
+		signalCtx, cancelSignal := context.WithCancelCause(ctx)
+		defer cancelSignal(nil)
+		signals := make(chan os.Signal, 2)
+		signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+		defer signal.Stop(signals)
+		signalDone := make(chan struct{})
+		defer func() { cancelSignal(nil); <-signalDone }()
+		go func() {
+			defer close(signalDone)
+			select {
+			case sig := <-signals:
+				cancelSignal(signalCause{sig.(syscall.Signal)})
+			case <-signalCtx.Done():
+			}
+		}()
+		ctx = signalCtx
+	}
 	input, closeInput, e := inputReader(stdin)
 	if e != nil {
 		return 1, e
 	}
 	defer closeInput()
-	release, e := runtimelease.Acquire(cfg.Root)
-	if e != nil {
-		return 1, e
+	if !o.externalLease {
+		release, e := runtimelease.Acquire(cfg.Root)
+		if e != nil {
+			return 1, e
+		}
+		defer release()
 	}
-	defer release()
 	identity, e := serverIdentity(cfg.Root, cfg.Identity)
 	if e != nil {
 		return 1, errors.New("cannot establish stable server identity")
@@ -130,6 +146,7 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 	queue := newEventQueue(sink, stderr, 2*time.Second, 2*time.Second)
 	defer queue.finish()
 	runID := randomID()
+	control := &stopControl{run: runID}
 	redact := redactFor(cfg)
 	var eventMu sync.Mutex
 	var currentStatus func() Status
@@ -155,7 +172,11 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 		queue.publish(event)
 	}
 	state := &statusStore{status: Status{RunID: runID, State: "preparing", Versions: map[string]string{}}}
-	currentStatus = state.snapshot
+	currentStatus = func() Status {
+		s := state.snapshot()
+		s.ScheduledActionID, s.OperatorVeto = control.Evidence()
+		return s
+	}
 	closeStatus, e := state.serve(cfg.Root)
 	if e != nil {
 		return 1, errors.New("cannot serve local runtime status")
@@ -231,7 +252,7 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 	defer cancel()
 	stopCommands := make(chan string, 1)
 	inputDone := make(chan struct{})
-	go forwardInput(input, inWrite, stopCommands, life.Done(), inputDone)
+	go forwardInput(input, inWrite, stopCommands, life.Done(), inputDone, control.Handle)
 	defer func() {
 		cancel()
 		closeInput()
@@ -241,8 +262,9 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 		errs.flush()
 	}()
 	type probeResult struct {
-		s queryStatus
-		e error
+		at time.Time
+		s  queryStatus
+		e  error
 	}
 	results := make(chan probeResult, 1)
 	var probes sync.WaitGroup
@@ -252,7 +274,7 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 			defer probes.Done()
 			s, e := query(life, probeAddress)
 			select {
-			case results <- probeResult{s, e}:
+			case results <- probeResult{at: time.Now().UTC(), s: s, e: e}:
 			case <-life.Done():
 			}
 		}()
@@ -286,6 +308,9 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 			syscall.Kill(-cmd.Process.Pid, sig)
 		}
 	}
+	controlResults := make(chan protocol.UpdateControl, 1)
+	var controls sync.WaitGroup
+	defer func() { cancel(); controls.Wait() }()
 	var waitErr error
 loop:
 	for {
@@ -293,8 +318,17 @@ loop:
 		case waitErr = <-wait:
 			break loop
 		case <-ctxDone:
+			if context.Cause(ctx) != errUpdateRestart {
+				control.Veto()
+				if o.updates != nil {
+					o.updates.veto.Store(true)
+				}
+			}
 			ctxDone = nil
 			why := "context_canceled"
+			if context.Cause(ctx) == errUpdateRestart {
+				why = "standalone_update"
+			}
 			sig := syscall.SIGTERM
 			var cause signalCause
 			if errors.As(context.Cause(ctx), &cause) {
@@ -306,7 +340,11 @@ loop:
 			}
 			beginStop(why, sig)
 		case why := <-stopCommands:
-			beginStop(why, 0)
+			if why == "scheduled_update" {
+				beginStop(why, syscall.SIGTERM)
+			} else {
+				beginStop(why, 0)
+			}
 		case <-stopping:
 			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			stopping = nil
@@ -322,6 +360,7 @@ loop:
 				default:
 				}
 				state.update(func(s *Status) {
+					s.SampleAt = r.at
 					s.Map = redact(r.s.Map)
 					s.Players = r.s.Players
 					s.Versions["cs2"] = redact(r.s.Version)
@@ -339,6 +378,7 @@ loop:
 				emit("server.status", "query_ok", map[string]string{"map": r.s.Map, "players": itoa(r.s.Players.Count), "players_known": "true"})
 			} else {
 				state.update(func(s *Status) {
+					s.SampleAt = r.at
 					s.Players = Players{}
 					if ready && reason == "" {
 						s.Ready = false
@@ -347,7 +387,32 @@ loop:
 				})
 				emit("server.status", "query_failed", map[string]string{"players_known": "false"})
 			}
+			if o.control != nil && reason == "" {
+				snapshot := currentStatus()
+				controls.Add(1)
+				go func() {
+					defer controls.Done()
+					queryCtx, cancel := context.WithTimeout(life, 2*time.Second)
+					defer cancel()
+					intent, err := o.control.Control(queryCtx, snapshot)
+					if err == nil {
+						select {
+						case controlResults <- intent:
+						case <-life.Done():
+						}
+					}
+				}()
+			}
+			if o.updates != nil {
+				o.updates.observe(currentStatus(), inWrite)
+				state.update(func(s *Status) { s.UpdatePending = o.updates.pendingBuild() })
+			}
 			poll.Reset(o.poll)
+		case intent := <-controlResults:
+			if reason == "" {
+				control.Arm(intent)
+				state.update(func(s *Status) { s.ScheduledActionID, s.OperatorVeto = control.Evidence() })
+			}
 		case <-poll.C:
 			probe()
 		}
@@ -374,8 +439,12 @@ loop:
 			reason = "unexpected_exit"
 		}
 	}
+	actionID, veto := control.Evidence()
+	if o.updates != nil && veto {
+		o.updates.veto.Store(true)
+	}
 	if ready {
-		emit("server.down", reason, map[string]string{"exit_code": itoa(code)})
+		emit("server.down", reason, map[string]string{"exit_code": itoa(code), "action_id": actionID, "operator_veto": strconv.FormatBool(veto)})
 		if reason == "unexpected_exit" {
 			emit("server.crash", reason, map[string]string{"exit_code": itoa(code)})
 		}

@@ -184,7 +184,7 @@ func TestLostContactIsUnconfirmed(t *testing.T) {
 	core, stop := start(t, cfg, nil)
 	defer stop()
 	c := connect(t, cfg)
-	if e := c.ReportStatus(context.Background(), server.Status{RunID: "run", State: "ready", Ready: true}); e != nil {
+	if e := c.ReportStatus(context.Background(), server.Status{RunID: "run", State: "ready", Ready: true, SampleAt: time.Now().UTC()}); e != nil {
 		t.Fatal(e)
 	}
 	c.Close()
@@ -499,7 +499,7 @@ func TestServerRecordsAndStatusesAreImmutableCopies(t *testing.T) {
 		t.Fatal("mutable host record leaked")
 	}
 	cl := connect(t, cfg)
-	s := server.Status{RunID: "run", State: "ready", Ready: true, Versions: map[string]string{"cs2": "1"}}
+	s := server.Status{RunID: "run", State: "ready", Ready: true, SampleAt: time.Now().UTC(), Versions: map[string]string{"cs2": "1"}}
 	if e := cl.ReportStatus(context.Background(), s); e != nil {
 		t.Fatal(e)
 	}
@@ -531,7 +531,7 @@ func TestStaleRunCannotReplaceCurrentStatus(t *testing.T) {
 	defer stop()
 	cl := connect(t, cfg)
 	cl.ClaimRun(context.Background(), "old")
-	cl.ReportStatus(context.Background(), server.Status{RunID: "old", State: "ready", Ready: true})
+	cl.ReportStatus(context.Background(), server.Status{RunID: "old", State: "ready", Ready: true, SampleAt: time.Now().UTC()})
 	cl.ClaimRun(context.Background(), "new")
 	cl.ReportStatus(context.Background(), server.Status{RunID: "new", State: "starting"})
 	if e := cl.ReportStatus(context.Background(), server.Status{RunID: "old", State: "stopped"}); e == nil {
@@ -554,7 +554,7 @@ func TestTerminalStatusSurvivesBackloggedReadyObservation(t *testing.T) {
 			if _, err := runtime.ClaimRun(ctx, "run"); err != nil {
 				t.Fatal(err)
 			}
-			ready := server.Status{RunID: "run", State: "ready", Ready: true, Players: server.Players{Known: true, Count: 3}, Versions: map[string]string{"cs2": "build"}}
+			ready := server.Status{RunID: "run", State: "ready", Ready: true, SampleAt: time.Now().UTC(), Players: server.Players{Known: true, Count: 3}, Versions: map[string]string{"cs2": "build"}}
 			if err := runtime.ReportStatus(ctx, ready); err != nil {
 				t.Fatal(err)
 			}
@@ -617,7 +617,7 @@ func TestRuntimeDisconnectWhileStatusObserverRemains(t *testing.T) {
 		t.Fatal(err)
 	}
 	route := runtime.Route(nil)
-	snapshot, _ := json.Marshal(server.Status{RunID: "run", State: "ready", Ready: true, Players: server.Players{Known: true, Count: 5}})
+	snapshot, _ := json.Marshal(server.Status{RunID: "run", State: "ready", Ready: true, SampleAt: time.Now().UTC(), Players: server.Players{Known: true, Count: 5}})
 	readyEvent := event("ready")
 	readyEvent.Type = "server.status"
 	readyEvent.Reason = "query_ok"
@@ -641,7 +641,7 @@ func TestRuntimeDisconnectWhileStatusObserverRemains(t *testing.T) {
 	if got = core.Status("a"); got.State != "lost_contact" {
 		t.Fatalf("reconnect fabricated readiness: %+v", got)
 	}
-	if err = replacement.ReportStatus(ctx, server.Status{RunID: "run", State: "ready", Ready: true}); err != nil {
+	if err = replacement.ReportStatus(ctx, server.Status{RunID: "run", State: "ready", Ready: true, SampleAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
 	if got = core.Status("a"); !got.Ready {
@@ -659,9 +659,9 @@ func TestOnlyCurrentRunReportersRetainContact(t *testing.T) {
 			current := connect(t, cfg)
 			ctx := context.Background()
 			old.ClaimRun(ctx, "old")
-			old.ReportStatus(ctx, server.Status{RunID: "old", State: "ready", Ready: true})
+			old.ReportStatus(ctx, server.Status{RunID: "old", State: "ready", Ready: true, SampleAt: time.Now().UTC()})
 			current.ClaimRun(ctx, "current")
-			if err := current.ReportStatus(ctx, server.Status{RunID: "current", State: "ready", Ready: true, Players: server.Players{Known: true, Count: 2}}); err != nil {
+			if err := current.ReportStatus(ctx, server.Status{RunID: "current", State: "ready", Ready: true, SampleAt: time.Now().UTC(), Players: server.Players{Known: true, Count: 2}}); err != nil {
 				t.Fatal(err)
 			}
 			if closeOldFirst {

@@ -33,7 +33,7 @@ func inputReader(in io.Reader) (io.Reader, func(), error) {
 		return nil, nil, errors.New("console input requires a file, finite standard reader, or owned io.ReadCloser")
 	}
 }
-func forwardInput(in io.Reader, out *os.File, stopping chan<- string, done <-chan struct{}, finished chan<- struct{}) {
+func forwardInput(in io.Reader, out *os.File, stopping chan<- string, done <-chan struct{}, finished chan<- struct{}, guards ...func(string) (bool, string)) {
 	defer close(finished)
 	if in == nil {
 		return
@@ -42,6 +42,19 @@ func forwardInput(in io.Reader, out *os.File, stopping chan<- string, done <-cha
 	s.Buffer(make([]byte, 4096), 64<<10)
 	for s.Scan() {
 		line := s.Text()
+		if len(guards) > 0 {
+			handled, why := guards[0](line)
+			if handled {
+				if why != "" {
+					select {
+					case stopping <- why:
+					case <-done:
+						return
+					}
+				}
+				continue
+			}
+		}
 		if strings.EqualFold(strings.TrimSpace(line), "quit") || strings.EqualFold(strings.TrimSpace(line), "exit") {
 			select {
 			case stopping <- "console_stop":

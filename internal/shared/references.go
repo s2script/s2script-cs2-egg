@@ -84,6 +84,13 @@ func (s *Store) reserve(ctx context.Context, server, run, request, generation st
 	if len(r.Records) >= 8192 {
 		return zero, errors.New("shared reference quota exhausted; perform stopped reconciliation")
 	}
+	if generation == "" {
+		targets, err := s.targets()
+		if err != nil {
+			return zero, err
+		}
+		generation = targets[server]
+	}
 	var g Generation
 	if generation == "" {
 		g, e = s.Current()
@@ -218,6 +225,20 @@ func (s *Store) Prune(ctx context.Context) ([]string, error) {
 		return nil, e
 	}
 	keep := map[string]bool{g.ID: true}
+	targets, e := s.targets()
+	if e != nil {
+		return nil, e
+	}
+	for _, target := range targets {
+		keep[target] = true
+	}
+	pins, e := s.generationMap("update-pins.json")
+	if e != nil {
+		return nil, e
+	}
+	for _, pin := range pins {
+		keep[pin] = true
+	}
 	for _, v := range r.Records {
 		keep[v.Generation] = true
 	}

@@ -20,12 +20,13 @@ type Allocation struct {
 	Port int    `json:"port"`
 }
 type NodeServer struct {
-	HelperSocket string     `json:"helper_socket,omitempty"`
-	ID           string     `json:"id"`
-	Volume       string     `json:"volume"`
-	PeerUID      uint32     `json:"peer_uid"`
-	AccessGID    int        `json:"access_gid"`
-	Allocation   Allocation `json:"allocation"`
+	Updates      RegisteredUpdates `json:"updates"`
+	HelperSocket string            `json:"helper_socket,omitempty"`
+	ID           string            `json:"id"`
+	Volume       string            `json:"volume"`
+	PeerUID      uint32            `json:"peer_uid"`
+	AccessGID    int               `json:"access_gid"`
+	Allocation   Allocation        `json:"allocation"`
 }
 type NodeLimits struct {
 	Pending int `json:"pending"`
@@ -39,6 +40,7 @@ type SharedNode struct {
 	ReserveBytes uint64 `json:"reserve_bytes"`
 }
 type Node struct {
+	Updates       NodeUpdates  `json:"updates"`
 	Shared        SharedNode   `json:"shared"`
 	SchemaVersion int          `json:"schema_version"`
 	ID            string       `json:"id"`
@@ -112,9 +114,30 @@ func (n *Node) Validate() error {
 			n.Shared.ReserveBytes = 64 << 30
 		}
 	}
+	if n.Updates.Enabled {
+		if e := n.Updates.Validate(); e != nil {
+			return e
+		}
+		if !n.Shared.Enabled || n.Updates.PollSeconds < 10 || n.Updates.PollSeconds > 86400 {
+			return errors.New("node updates require shared store and bounded poll_seconds (10..86400)")
+		}
+	}
 	ids := map[string]bool{}
 	allocations := map[string]bool{}
 	for i, s := range n.Servers {
+		if s.Updates.Enabled {
+			s.Updates.Policy.Defaults()
+			n.Servers[i].Updates = s.Updates
+			if e := s.Updates.Policy.Validate(); e != nil {
+				return e
+			}
+			if s.Updates.AttachMode != "" && s.Updates.AttachMode != "hardlink" && s.Updates.AttachMode != "copy" {
+				return errors.New("invalid update attach_mode")
+			}
+			if s.Updates.AttachMode != "" && s.HelperSocket == "" {
+				return errors.New("host attachment updates require helper_socket")
+			}
+		}
 		if !nodeID.MatchString(s.ID) || ids[s.ID] || !cleanAbsolute(s.Volume) || s.AccessGID < 0 || len(filepath.Join(s.Volume, "egg/s2node.sock")) > 107 || net.ParseIP(s.Allocation.IP) == nil || s.Allocation.Port < 1 || s.Allocation.Port > 65535 {
 			return errors.New("invalid or duplicate registered server")
 		}

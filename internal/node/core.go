@@ -94,7 +94,19 @@ func cloneStatus(s server.Status) server.Status {
 func (c *Core) Status(id string) server.Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return cloneStatus(c.statuses[id])
+	s := cloneStatus(c.statuses[id])
+	max := 15 * time.Second
+	for _, configured := range c.cfg.Servers {
+		if configured.ID == id && configured.Updates.Policy.FreshnessSeconds > 0 {
+			max = time.Duration(configured.Updates.Policy.FreshnessSeconds) * time.Second
+		}
+	}
+	now := time.Now().UTC()
+	if !s.SampleAt.IsZero() && (s.SampleAt.After(now) || s.ReceivedAt.IsZero() || s.ReceivedAt.After(now) || now.Sub(s.SampleAt) > max || now.Sub(s.ReceivedAt) > max) {
+		s.Players = server.Players{}
+		s.Ready = false
+	}
+	return s
 }
 func (c *Core) Publish(ctx context.Context, e events.Event) error {
 	if err := ctx.Err(); err != nil {
@@ -258,11 +270,20 @@ func (c *Core) serve(ctx context.Context, l *net.UnixListener, id string, uid ui
 						return nil, errors.New("invalid hello")
 					}
 					available := []string{protocol.CapStatus}
+					if admin {
+						c.mu.Lock()
+						if c.actions[protocol.CapUpdateAdmin] != nil {
+							available = append(available, protocol.CapUpdateAdmin)
+						}
+						c.mu.Unlock()
+					}
 					if !admin {
 						available = append(available, protocol.CapEvents)
 						c.mu.Lock()
 						for cap := range c.actions {
-							available = append(available, cap)
+							if cap != protocol.CapUpdateExecute && cap != protocol.CapUpdateAdmin {
+								available = append(available, cap)
+							}
 						}
 						c.mu.Unlock()
 					}
@@ -380,7 +401,7 @@ func (c *Core) handle(ctx context.Context, id string, admin bool, caps map[strin
 		// A terminal observation dominates queued same-run reports. The runtime
 		// deliberately delivers lifecycle events ahead of raw status backlog.
 		if c.statuses[id].State != "stopped" {
-			c.statuses[id] = cloneStatus(s)
+			c.statuses[id] = receiveStatus(s, c.statuses[id], time.Now().UTC())
 		}
 		c.mu.Unlock()
 		return struct{}{}, nil
@@ -407,6 +428,18 @@ func (c *Core) handle(ctx context.Context, id string, admin bool, caps map[strin
 		}
 		return protocol.Receipt{Result: out}, err
 	default:
+		if m.Type == protocol.CapUpdateExecute {
+			return nil, errors.New("host dispatcher required")
+		}
+		if m.Type == protocol.CapUpdateAdmin {
+			if !admin {
+				return nil, errors.New("administrator socket required")
+			}
+			if e := validateAction(m); e != nil {
+				return nil, e
+			}
+			return c.invoke(ctx, Server{}, m.Type, m)
+		}
 		if admin {
 			return nil, errors.New("server socket required")
 		}
@@ -437,13 +470,20 @@ func (c *Core) observe(id string, e events.Event, contact *runtimeContact) {
 		s.State = "stopped"
 		s.Ready = false
 		s.Players = server.Players{}
+		s.IntendedStopReason = e.Reason
+		s.ScheduledActionID = e.Details["action_id"]
+		s.OperatorVeto = e.Details["operator_veto"] == "true"
 	case "server.status":
 		if raw := e.Details["runtime_status"]; raw != "" {
 			var reported server.Status
 			if json.Unmarshal([]byte(raw), &reported) == nil && reported.RunID == e.RunID {
-				s = cloneStatus(reported)
+				s = receiveStatus(reported, s, time.Now().UTC())
 			}
-		} else if e.Reason == "query_ok" {
+		} else if e.Reason == "query_ok" && !e.At.IsZero() && !e.At.Before(s.SampleAt) && !e.At.After(time.Now().UTC()) {
+			if !e.At.IsZero() && e.At.After(s.SampleAt) && !e.At.After(time.Now().UTC()) {
+				s.SampleAt = e.At
+				s.ReceivedAt = time.Now().UTC()
+			}
 			s.State = "ready"
 			s.Ready = true
 			s.Map = e.Details["map"]
@@ -461,6 +501,24 @@ func (c *Core) observe(id string, e events.Event, contact *runtimeContact) {
 }
 func validateAction(m protocol.Message) error {
 	switch m.Type {
+	case protocol.CapUpdateControl:
+		var r protocol.ControlRequest
+		if protocol.Decode(m.Payload, &r) != nil || r.RunID == "" || len(r.RunID) > 128 {
+			return errors.New("bounded current run required")
+		}
+	case protocol.CapUpdateExecute:
+		var r protocol.ExecuteUpdate
+		if protocol.Decode(m.Payload, &r) != nil || len(r.JobID) != 32 {
+			return errors.New("invalid job identity")
+		}
+	case protocol.CapUpdateAdmin:
+		var r protocol.UpdateAdmin
+		if protocol.Decode(m.Payload, &r) != nil {
+			return errors.New("invalid update administration")
+		}
+		if r.Operation != "list" && r.Operation != "retry" && r.Operation != "cancel" {
+			return errors.New("invalid update administration operation")
+		}
 	case protocol.CapPrepare:
 		var r protocol.PrepareRequest
 		if protocol.Decode(m.Payload, &r) != nil || r.AppID != 730 {
@@ -502,4 +560,20 @@ func validateAction(m protocol.Message) error {
 		return errors.New("unsupported action")
 	}
 	return nil
+}
+
+// A repeated or backlogged sample cannot renew freshness, even over a live socket.
+func receiveStatus(s, previous server.Status, now time.Time) server.Status {
+	if previous.RunID == s.RunID && !previous.SampleAt.IsZero() && s.SampleAt.Before(previous.SampleAt) {
+		return previous
+	}
+	s.ReceivedAt = previous.ReceivedAt
+	if s.SampleAt.IsZero() || s.SampleAt.After(now) {
+		s.Players = server.Players{}
+		s.Ready = false
+		s.ReceivedAt = time.Time{}
+	} else if previous.RunID != s.RunID || s.SampleAt.After(previous.SampleAt) {
+		s.ReceivedAt = now
+	}
+	return cloneStatus(s)
 }

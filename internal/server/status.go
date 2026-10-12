@@ -17,6 +17,11 @@ import (
 )
 
 type Status struct {
+	SampleAt           time.Time         `json:"sample_at,omitempty"`
+	ReceivedAt         time.Time         `json:"received_at,omitempty"`
+	ScheduledActionID  string            `json:"scheduled_action_id,omitempty"`
+	OperatorVeto       bool              `json:"operator_veto,omitempty"`
+	UpdatePending      string            `json:"update_pending,omitempty"`
 	RunID              string            `json:"run_id"`
 	State              string            `json:"state"`
 	Ready              bool              `json:"ready"`

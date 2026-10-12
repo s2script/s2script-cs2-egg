@@ -257,6 +257,11 @@ func (s *Store) Build(ctx context.Context) (Generation, error) {
 		return zero, e
 	}
 	defer unlock()
+	return s.buildLocked(ctx)
+}
+func (s *Store) buildLocked(ctx context.Context) (Generation, error) {
+	var zero Generation
+	var e error
 	if e = ctx.Err(); e != nil {
 		return zero, e
 	}

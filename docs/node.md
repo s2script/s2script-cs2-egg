@@ -1,6 +1,6 @@
 # Optional node core
 
-The Linux x86-64 `s2node` daemon is optional. The ordinary Pterodactyl or Pelican egg starts without it. The core provides socket-bound identity, typed capability negotiation, runtime status reports, optional-module lifecycle, and durable webhook ownership. Shared game generations, workshop management, restart execution and later administrative modules are separate milestones; this core advertises those capabilities only when an explicitly registered implementation provides them. No Docker socket or Wings administrator credential enters the game container.
+The Linux x86-64 `s2node` daemon is optional. The ordinary Pterodactyl or Pelican egg starts without it. The core provides socket-bound identity, typed capability negotiation, runtime status reports, optional-module lifecycle, and durable webhook ownership. Shared generation preparation and update scheduling are optional registered modules; cache/workshop and later administrative modules are separate milestones. The core advertises only capabilities provided by registered implementations. No Docker socket or Wings administrator credential enters the game container.
 
 ## Build, stage and configure
 
@@ -40,7 +40,7 @@ The node `game.prepare` operation reserves an already published immutable genera
 
 `node.Module` exposes Name, Start(context, Host), Health and Close(context). Start/Close/handlers must honor context cancellation; Health and capability enumeration must return promptly. Start errors or recovered panics mark only that module failed; successful modules and core sockets remain available. `Core.AddModule(module, grants)` registers explicit capabilities before Run. Module Host returns copied Server records and status, publishes run-associated events only with an events grant, and dispatches only granted actions. Server records contain ID, absolute volume, socket and game allocation. In-process modules remain trusted and cannot be forcibly stopped if they violate cancellation.
 
-Task9 provides shared preparation and the stopped administrative helper; see [shared files](shared-files.md). Task10 supplies restart scheduling (immediate, when empty, maintenance window, with maximum delay). Hardlinks and no-mount copies require stop → host Attach → start. Task11 supplies typed cache/workshop operations. The transport itself does not invent these later module effects.
+Task9 provides shared preparation and the stopped administrative helper; see [shared files](shared-files.md). The opt-in update module supplies restart scheduling (immediate, when empty, maintenance window, with maximum delay); see [updates and recovery](updates.md). Hardlinks and no-mount copies require stop → host Attach → start. Task11 supplies typed cache/workshop operations. The transport itself does not invent these later module effects.
 
 ## Wire protocol and limits
 

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,7 +22,9 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/node"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
+	"github.com/s2script/s2script-cs2-egg/internal/scheduler"
 	"github.com/s2script/s2script-cs2-egg/internal/shared"
+	"github.com/s2script/s2script-cs2-egg/internal/wings"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
@@ -37,6 +40,8 @@ func run(args []string, out, errs io.Writer) int {
 	serverID := flags.String("server", "", "registered server ID for shared-attach")
 	generation := flags.String("generation", "", "published generation ID")
 	mode := flags.String("mode", "symlink", "attachment mode: symlink/copy/hardlink")
+	jobID := flags.String("job", "", "durable update job ID")
+	allowStart := flags.Bool("allow-start", false, "explicitly authorize offline job resumption to start server")
 	directory := flags.String("directory", "", "install staging directory")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 {
 		return 2
@@ -68,7 +73,7 @@ func run(args []string, out, errs io.Writer) int {
 		return 0
 	}
 	switch command {
-	case "run", "config-check", "status", "doctor", "shared-build", "shared-prune", "shared-attach":
+	case "run", "config-check", "status", "doctor", "shared-build", "shared-prune", "shared-attach", "updates-list", "updates-retry", "updates-cancel":
 	default:
 		fmt.Fprintln(errs, "unknown command")
 		return 2
@@ -77,6 +82,29 @@ func run(args []string, out, errs io.Writer) int {
 	if e != nil {
 		fmt.Fprintln(errs, "node configuration error:", e)
 		return 1
+	}
+	if command == "updates-list" || command == "updates-retry" || command == "updates-cancel" {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		conn, e := (&net.Dialer{}).DialContext(ctx, "unix", cfg.AdminSocket)
+		if e != nil {
+			fmt.Fprintln(errs, "administrator socket unavailable")
+			return 1
+		}
+		client := protocol.NewClient(conn)
+		defer client.Close()
+		var welcome protocol.Welcome
+		var result json.RawMessage
+		e = client.Call(ctx, "hello", protocol.Hello{Capabilities: []string{protocol.CapUpdateAdmin}}, &welcome)
+		if e == nil {
+			e = client.Call(ctx, protocol.CapUpdateAdmin, protocol.UpdateAdmin{Operation: strings.TrimPrefix(command, "updates-"), JobID: *jobID, AllowStart: *allowStart}, &result)
+		}
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		json.NewEncoder(out).Encode(result)
+		return 0
 	}
 	if command == "shared-build" || command == "shared-prune" || command == "shared-attach" {
 		if !cfg.Shared.Enabled {
@@ -181,6 +209,40 @@ func run(args []string, out, errs io.Writer) int {
 			if e != nil {
 				fmt.Fprintln(errs, e)
 				return 1
+			}
+			if cfg.Updates.Enabled {
+				power, err := wings.New(cfg.Updates.Wings)
+				if err != nil {
+					fmt.Fprintln(errs, err)
+					return 1
+				}
+				engine, err := scheduler.Open(scheduler.Options{Directory: filepath.Join(cfg.StateDir, "updates"), Power: power, Status: core.Status, Pin: store.PinTarget, Select: store.SelectTarget, Clear: store.ClearTarget, Attach: func(ctx context.Context, id, generation, mode string) error {
+					for _, srv := range core.Servers() {
+						if srv.ID == id {
+							return store.Attach(ctx, srv, generation, mode)
+						}
+					}
+					return fmt.Errorf("unknown configured server")
+				}})
+				if err != nil {
+					fmt.Fprintln(errs, err)
+					return 1
+				}
+				policies := map[string]scheduler.ServerPolicy{}
+				for _, srv := range cfg.Servers {
+					if srv.Updates.Enabled {
+						policies[srv.ID] = scheduler.ServerPolicy{Policy: scheduler.FromConfig(srv.Updates.Policy), AttachMode: srv.Updates.AttachMode}
+					}
+				}
+				updates := &scheduler.Module{Engine: engine, Policies: policies, Interval: time.Duration(cfg.Updates.PollSeconds) * time.Second, Poll: func(ctx context.Context) (scheduler.Target, error) {
+					g, _, err := store.PollUpdate(ctx, nil)
+					return scheduler.Target{Generation: g.ID, Build: g.BuildID}, err
+				}}
+				if err = core.AddModule(updates, updates.Capabilities()); err != nil {
+					engine.Close()
+					fmt.Fprintln(errs, err)
+					return 1
+				}
 			}
 			if e = core.AddModule(&shared.Module{Store: store}, []string{protocol.CapPrepare}); e != nil {
 				fmt.Fprintln(errs, e)
