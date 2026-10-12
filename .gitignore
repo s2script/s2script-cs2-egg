@@ -1,1 +1,5 @@
 /bin/
+/server.env
+/.env
+/.env.*
+/egg/server.json

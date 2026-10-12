@@ -1,0 +1,12 @@
+.git
+.superpowers
+.agents
+.codex
+.aws
+bin
+**/egg/server.json
+**/.env
+**/.env.*
+*.log
+**/*.env
+**/server.env

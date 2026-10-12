@@ -286,3 +286,54 @@ func TestCanonicalStartupFailureEvent(t *testing.T) {
 		}
 	}
 }
+
+func TestDebugPortValidation(t *testing.T) {
+	for _, tt := range []struct {
+		value string
+		want  int
+		valid bool
+	}{{"0", 0, true}, {"2345", 2345, true}, {"65535", 65535, true}, {"-1", 0, false}, {"65536", 0, false}, {"no", 0, false}, {"27015", 0, false}} {
+		t.Run(tt.value, func(t *testing.T) {
+			cfg, e := config.LoadServer(t.TempDir(), func(k string) (string, bool) {
+				if k == "ALLOW_TOKENLESS" {
+					return "1", true
+				}
+				if k == "GDB_DEBUG_PORT" {
+					return tt.value, true
+				}
+				return "", false
+			})
+			if tt.valid {
+				if e != nil || cfg.Launch.DebugPort != tt.want {
+					t.Fatalf("debug=%d err=%v", cfg.Launch.DebugPort, e)
+				}
+			} else if e == nil {
+				t.Fatal("invalid debugger port accepted")
+			}
+		})
+	}
+}
+func TestWebhookDeliveryLimits(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "egg"), 0755)
+	os.WriteFile(filepath.Join(root, "egg/server.json"), []byte(`{"steam":{"allow_tokenless":true},"webhook":{"queue_capacity":8,"max_retries":3}}`), 0600)
+	cfg, e := config.LoadServer(root, func(string) (string, bool) { return "", false })
+	if e != nil || cfg.Webhook.QueueCapacity != 8 || cfg.Webhook.MaxRetries != 3 {
+		t.Fatalf("limits %+v err %v", cfg.Webhook, e)
+	}
+}
+
+func TestWebhookLimitsRejectMalformedOverrides(t *testing.T) {
+	for _, body := range []string{`{"queue_capacity":0}`, `{"queue_capacity":1025}`, `{"max_retries":-1}`, `{"max_retries":11}`} {
+		root := t.TempDir()
+		os.MkdirAll(filepath.Join(root, "egg"), 0755)
+		os.WriteFile(filepath.Join(root, "egg/server.json"), []byte(`{"steam":{"allow_tokenless":true},"webhook":`+body+`}`), 0600)
+		if _, e := config.LoadServer(root, func(string) (string, bool) { return "", false }); e == nil {
+			t.Fatalf("accepted delivery limits %s", body)
+		}
+	}
+	cfg := load(t, nil)
+	if cfg.Launch.DebugPort != 0 || cfg.Webhook.QueueCapacity != 64 || cfg.Webhook.MaxRetries != 2 {
+		t.Fatalf("effective defaults %+v", cfg)
+	}
+}

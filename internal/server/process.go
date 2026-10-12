@@ -66,7 +66,7 @@ func launchArgs(c config.Server) []string {
 func homeEnv(root string) []string {
 	env := []string{}
 	for _, s := range os.Environ() {
-		if !strings.HasPrefix(s, "HOME=") && !strings.HasPrefix(s, "STEAM_ACC=") && !strings.HasPrefix(s, "DISCORD_WEBHOOK_URL=") {
+		if !strings.HasPrefix(s, "GAME_DEBUGGER=") && !strings.HasPrefix(s, "GDB_DEBUG_PORT=") && !strings.HasPrefix(s, "HOME=") && !strings.HasPrefix(s, "STEAM_ACC=") && !strings.HasPrefix(s, "DISCORD_WEBHOOK_URL=") {
 			env = append(env, s)
 		}
 	}
@@ -155,6 +155,11 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 		emit("server.start_failed", reason, nil)
 		return 1, errors.New(redact(e.Error()))
 	}
+	if cfg.Launch.DebugPort != 0 {
+		if _, e := exec.LookPath("gdbserver"); e != nil {
+			return fail("debugger_unavailable", errors.New("GDB_DEBUG_PORT requires gdbserver; select the debug image"))
+		}
+	}
 	versions, e := o.prepare(ctx, cfg, emit)
 	if e != nil {
 		return fail("preparation_failed", e)
@@ -189,6 +194,9 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 	cmd := exec.Command(filepath.Join(cfg.Root, "game/cs2.sh"), launchArgs(cfg)...)
 	cmd.Dir = filepath.Join(cfg.Root, "game")
 	cmd.Env = homeEnv(cfg.Root)
+	if cfg.Launch.DebugPort != 0 {
+		cmd.Env = append(cmd.Env, "GAME_DEBUGGER=gdbserver --no-disable-randomization :"+itoa(cfg.Launch.DebugPort))
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = time.Second
 	inRead, inWrite, e := os.Pipe()

@@ -5,18 +5,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
+	"testing"
 	"time"
 
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestReadOnlyDiagnostics(t *testing.T) {
@@ -279,5 +284,53 @@ wait
 				release()
 			})
 		}
+	}
+}
+
+type webhookRoute struct{ target *url.URL }
+
+func (r webhookRoute) RoundTrip(req *http.Request) (*http.Response, error) {
+	cp := req.Clone(req.Context())
+	u := *req.URL
+	u.Scheme = r.target.Scheme
+	u.Host = r.target.Host
+	cp.URL = &u
+	return (&http.Transport{}).RoundTrip(cp)
+}
+func TestRunCLIFlushesStartupFailureWebhook(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "steamcmd/linux32"), 0755)
+	for _, name := range []string{"steamcmd", "steamerrorreporter", "libstdc++.so.6", "crashhandler.so"} {
+		os.WriteFile(filepath.Join(root, "steamcmd/linux32", name), []byte("fixture"), 0755)
+	}
+	os.WriteFile(filepath.Join(root, "steamcmd/steamcmd.sh"), []byte("#!/bin/sh\nexit 7\n"), 0755)
+	var count atomic.Int32
+	var payload string
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		payload = string(b)
+		count.Add(1)
+		io.WriteString(w, `{"id":"ok"}`)
+	}))
+	defer s.Close()
+	u, _ := url.Parse(s.URL)
+	old := http.DefaultTransport
+	http.DefaultTransport = webhookRoute{u}
+	defer func() { http.DefaultTransport = old }()
+	var out, errs bytes.Buffer
+	code := run([]string{"run", "--root", root}, func(k string) (string, bool) {
+		if k == "ALLOW_TOKENLESS" {
+			return "1", true
+		}
+		if k == "DISCORD_WEBHOOK_URL" {
+			return "https://discord.com/api/webhooks/1/private-hook", true
+		}
+		return "", false
+	}, &out, &errs)
+	if code == 0 || count.Load() != 1 || !strings.Contains(payload, "server.start_failed") {
+		t.Fatalf("code %d requests %d payload %s errors %s", code, count.Load(), payload, errs.String())
+	}
+	if strings.Contains(errs.String(), "private-hook") {
+		t.Fatal("secret in CLI error")
 	}
 }

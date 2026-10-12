@@ -12,7 +12,9 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
+	"github.com/s2script/s2script-cs2-egg/internal/alerts"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/plugins"
 	runtime "github.com/s2script/s2script-cs2-egg/internal/server"
@@ -70,7 +72,23 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 	}
 	switch command {
 	case "run":
-		code, e := runtime.Run(context.Background(), server, nil, os.Stdin, out, errs)
+		dispatcher, e := alerts.NewDiscord(alerts.Config{URL: server.Webhook.URL, Events: server.Webhook.Events, QueueCapacity: server.Webhook.QueueCapacity, AttemptTimeout: time.Duration(server.Webhook.TimeoutSeconds) * time.Second, MaxRetries: server.Webhook.MaxRetries}, nil)
+		if e != nil {
+			fmt.Fprintln(errs, "webhook configuration error:", e)
+			return 1
+		}
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if e := dispatcher.Close(ctx); e != nil {
+				fmt.Fprintln(errs, "webhook shutdown deadline reached; pending delivery may be lost")
+			}
+			stats := dispatcher.Stats()
+			if stats.Failed > 0 || stats.Dropped > 0 {
+				fmt.Fprintf(errs, "webhook delivery: failed=%d dropped=%d\n", stats.Failed, stats.Dropped)
+			}
+		}()
+		code, e := runtime.Run(context.Background(), server, dispatcher, os.Stdin, out, errs)
 		if e != nil {
 			fmt.Fprintln(errs, "server error:", e)
 		}

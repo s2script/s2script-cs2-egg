@@ -2,7 +2,7 @@
 
 GPL-3.0-or-later CS2 server tooling for Pterodactyl and Pelican, focused on Metamod and S2Script. The intended repository namespace is `s2script/s2script-cs2-egg`.
 
-**Current milestone:** validated configuration, plugin catalog/policy/reconciliation, recoverable framework/plugin preparation, and supervised `s2egg run` with local readiness, console forwarding, live status, and process-group shutdown. The stopped `plugins reconcile` callback is wired. See [runtime contracts](docs/runtime.md), [framework preparation](docs/frameworks.md), and [feature status](docs/parity.md). The image bootstrap seed and webhook delivery arrive in Task 7; the development egg is not yet a packaged playable-server release. No image or downloadable release is published, and native CS2/panel acceptance has not been run.
+**Current milestone:** source-built standalone runtime with SteamCMD bootstrap, supervised readiness/console/status/shutdown, Metamod/S2Script preparation, checks of every installed plugin, bounded Discord lifecycle delivery, and an opt-in debug image target. See [installation and rollback](docs/install.md), [webhook delivery](docs/webhooks.md), [runtime contracts](docs/runtime.md), and [verification/acceptance](docs/testing.md). No public image or downloadable release is published. Local Docker and native CS2/panel acceptance have not been run; CI image-build results must be checked on the actual commit.
 
 ## Build and verify
 
@@ -15,7 +15,7 @@ make build
 make egg-check
 ```
 
-Set `GO=/absolute/path/to/go` when using a task-local toolchain. Builds use `-trimpath`. Regenerate both artifacts with `make egg`; `IMAGE=your-local-image:tag` selects an image reference. The default `s2script-cs2-egg:dev` is a local development reference, not an existing published image. A Dockerfile and runtime image arrive in a later task.
+Set `GO=/absolute/path/to/go` when using a task-local toolchain. Builds use `-trimpath`. Regenerate both artifacts with `make egg`; `IMAGE=your-local-image:tag` selects an image reference. The default `s2script-cs2-egg:dev` is a local development reference, not an existing published image. Build the `runtime` or `debug` target in [docker/Dockerfile](docker/Dockerfile) using the commands in the installation guide.
 
 ## Read-only commands
 
@@ -65,13 +65,16 @@ JSON uses schema version `1`, strict typed values, and the groups shown below. F
     "max_players": 32,
     "game_type": 0,
     "game_mode": 0,
+    "debug_port": 0,
     "custom_params": "+hostname \"My server\""
   },
   "readiness": { "timeout_seconds": 120, "poll_interval_seconds": 1 },
   "webhook": {
     "url": "",
     "events": ["server.up", "server.down", "server.crash", "server.start_failed"],
-    "timeout_seconds": 10
+    "timeout_seconds": 10,
+    "queue_capacity": 64,
+    "max_retries": 2
   }
 }
 ```
@@ -98,10 +101,11 @@ This example explicitly opts into tokenless mode for local diagnostics and disab
 | `S2SCRIPT_REVIEWED_ONLY` | `plugins.reviewed_only` | `0` (default) or `1`; require exact registry review state `reviewed` |
 | `S2SCRIPT_PLUGIN_FILE` | `plugins.file` | `s2script-plugins.json`; relative file path within root, including existing symlink resolution |
 | `S2SCRIPT_HUD` | `frameworks.hud` | `0`; explicit `0` or `1`; optional staged native HUD setup |
+| `GDB_DEBUG_PORT` | `launch.debug_port` | `0` disables; integer 1–65535 distinct from game port; requires debug image and restricted allocated TCP access |
 | `DISCORD_WEBHOOK_URL` | `webhook.url` | Empty secret; HTTPS Discord `/api[/vN]/webhooks/<numeric-id>/<token>` URL when configured |
 | `S2SCRIPT_PLUGIN_<NAME>` | `plugins.bundled` | `default`, `0`, or `1`; see [generated plugin controls](docs/bundled-plugins.md) |
 
-Webhook hostnames are restricted to `discord.com`, `discordapp.com`, `canary.discord.com`, and `ptb.discord.com`; credentials, queries, and fragments in URLs are rejected. Readiness timeout accepts 1–3600 seconds; polling accepts 1 second through that timeout. Webhook timeout accepts 1–60 seconds. Additional selectable event names are `server.restart`, `server.update`, `backup`, and `guard`. These are validated settings for future runtime behavior; no notification is sent in this milestone.
+Webhook hostnames are restricted to `discord.com`, `discordapp.com`, `canary.discord.com`, and `ptb.discord.com`; credentials, queries, and fragments in URLs are rejected. Readiness timeout accepts 1–3600 seconds; polling accepts 1 second through that timeout. Webhook timeout accepts 1–60 seconds. Additional selectable event names are `server.restart`, `server.update`, `backup`, and `guard`. Queue capacity accepts 1–1024 and max retries accepts 0–10 (defaults 64/2). Lifecycle delivery is wired now; restart/update/backup/guard producers remain future work. See [delivery limits and node ownership](docs/webhooks.md).
 
 Panel plugin `default` preserves saved enablement or the bundled release default. Explicit panel `0`/`1` overrides that choice. Every installed plugin, including disabled, pinned, local, and missing entries, is checked during startup reconciliation; disabled artifacts remain outside the runtime's top-level scan. See [the plugin operator guide](docs/plugins.md).
 
@@ -109,11 +113,11 @@ Panel plugin `default` preserves saved enablement or the bundled release default
 
 The executable now supports `s2egg prepare`, `s2egg run`, and `s2egg status`, each with `--root PATH`. These use the image/SteamCMD prerequisites described in [runtime contracts](docs/runtime.md). `status` reports the live managed owner, readiness, known/unknown player count, versions, and intended stop reason.
 
-## Development egg import
+## Standalone egg import
 
-The generated file is [pterodactyl/s2script-cs2-egg.json](pterodactyl/s2script-cs2-egg.json). Import it through the panel's egg import UI for structure/configuration review. Pterodactyl's reserved `SERVER_IP` and `SERVER_PORT` come from the assigned allocation and are deliberately absent from editable egg-variable definitions. Use the assigned port and a reachable game/UDP allocation when the runtime is delivered.
+The generated file is [pterodactyl/s2script-cs2-egg.json](pterodactyl/s2script-cs2-egg.json). Import it through the panel's egg import UI after building its configured image on the assigned node. Pterodactyl's reserved `SERVER_IP` and `SERVER_PORT` come from the assigned allocation and are deliberately absent from editable egg-variable definitions. Use the assigned port and a reachable game/UDP allocation for runtime readiness and client traffic.
 
-The egg declares `s2egg run`, graceful stop command `quit`, a readiness-gated `S2EGG_READY` startup marker, and a development installer notice. It includes 18 unique inherited plugin controls: 14 release-enabled and four release-disabled. Maintainers should replace the placeholder `noreply@example.com` author on release. Panel import and live Pelican/Pterodactyl acceptance have not been exercised here.
+The egg declares `s2egg run`, graceful stop command `quit`, a readiness-gated `S2EGG_READY` startup marker, and a first-start installation notice. It includes 18 unique inherited plugin controls: 14 release-enabled and four release-disabled. Maintainers should replace the placeholder `noreply@example.com` author on release. Panel import and live Pelican/Pterodactyl acceptance have not been exercised here.
 
 To verify the saved artifacts without rewriting them:
 
@@ -121,7 +125,7 @@ To verify the saved artifacts without rewriting them:
 go run ./cmd/egggen --check --catalog-output docs/bundled-plugins.md
 ```
 
-The server is intended to run as its non-root container user. It requires no Docker socket or Wings administrator credential mounted into the game container. Optional node management, shared updates, backups, workshop management, guard features, and lifecycle notifications remain planned. The local A2S query gates `server.up`; process spawn alone does not announce success. This query does not prove native plugins loaded. Delivery after SIGKILL or host/power failure cannot be guaranteed by the standalone process.
+The server is intended to run as its non-root container user. It requires no Docker socket or Wings administrator credential mounted into the game container. Optional node management, shared updates, backups, workshop management and guard features remain planned. The local A2S query gates `server.up`; process spawn alone does not announce success. This query does not prove native plugins loaded. Delivery after SIGKILL or host/power failure cannot be guaranteed by the standalone process.
 
 ## License
 
@@ -129,4 +133,4 @@ Project code is GPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE). D
 
 ## Credits
 
-[K4ryuu's CS2-Egg-Go](https://github.com/K4ryuu/CS2-Egg-Go) supplied the operational feature/parity reference and GPL licensing basis. [S2Script](https://github.com/s2script/s2script) supplied the framework and bundled-plugin identity/default reference (inspected revision `86d1de3ba7366b08f7e8bb0db34ca2a1e84415d7`). [Metamod:Source](https://www.sourcemm.net/) is S2Script's native dependency. Valve provides CS2 and SteamCMD. This milestone imports no upstream product source module.
+[K4ryuu's CS2-Egg-Go](https://github.com/K4ryuu/CS2-Egg-Go) supplied the operational feature/parity reference and GPL licensing basis. [S2Script](https://github.com/s2script/s2script) supplied the framework and bundled-plugin identity/default reference (inspected revision `86d1de3ba7366b08f7e8bb0db34ca2a1e84415d7`). [Metamod:Source](https://www.sourcemm.net/) is S2Script's native dependency. Valve provides CS2 and SteamCMD. No upstream product source module is imported; the Docker rootfs re-export approach is credited in NOTICE.

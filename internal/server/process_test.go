@@ -5,10 +5,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/s2script/s2script-cs2-egg/internal/alerts"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
@@ -218,15 +223,9 @@ func TestReadinessGatesUpEvent(t *testing.T) {
 	if code == 0 || e == nil {
 		t.Fatal("unready startup succeeded")
 	}
-	failed := nextEvent(t, s, "server.start_failed")
+	failed := assertFailedLifecycle(t, s)
 	if failed.Reason != "readiness_timeout" {
 		t.Fatal(failed.Reason)
-	}
-	for len(s.ch) > 0 {
-		e := <-s.ch
-		if e.Type == "server.up" || e.Type == "server.down" {
-			t.Fatal("lifecycle before readiness")
-		}
 	}
 }
 func TestFailedStartupEmitsNoUp(t *testing.T) {
@@ -236,12 +235,7 @@ func TestFailedStartupEmitsNoUp(t *testing.T) {
 	if code != 7 || e == nil {
 		t.Fatalf("%d %v", code, e)
 	}
-	nextEvent(t, s, "server.start_failed")
-	for len(s.ch) > 0 {
-		if e := <-s.ch; e.Type == "server.up" {
-			t.Fatal("up before failure")
-		}
-	}
+	assertFailedLifecycle(t, s)
 }
 func TestShutdownReapsProcessGroup(t *testing.T) {
 	cfg, o := fixtureConfig(t, "group")
@@ -536,5 +530,190 @@ func TestShutdownDoesNotReapUnrelatedProcess(t *testing.T) {
 	var e *exec.ExitError
 	if !errors.As(sibling.Wait(), &e) || e.ExitCode() != 7 {
 		t.Fatal("unrelated child reaped by supervisor")
+	}
+}
+
+// Removing the default-off environment filter or constructing debugger text
+// from anything other than the validated integer breaks these consumer checks.
+func TestDebuggerEnvironmentAndReadiness(t *testing.T) {
+	for _, port := range []int{0, 2345} {
+		t.Run(strconv.Itoa(port), func(t *testing.T) {
+			cfg, o := fixtureConfig(t, "unready")
+			cfg.Launch.DebugPort = port
+			t.Setenv("GAME_DEBUGGER", "arbitrary inherited debugger")
+			bin := t.TempDir()
+			os.WriteFile(filepath.Join(bin, "gdbserver"), []byte("#!/bin/sh\nexit 0\n"), 0755)
+			t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+			script := filepath.Join(cfg.Root, "game/cs2.sh")
+			b, _ := os.ReadFile(script)
+			b = bytes.Replace(b, []byte("exec "), []byte("printf '%s' \"${GAME_DEBUGGER-}\" > \"$HOME/debug-env\"\nexec "), 1)
+			os.WriteFile(script, b, 0755)
+			s := &recordSink{make(chan events.Event, 64)}
+			code, e := runWith(context.Background(), cfg, s, nil, io.Discard, io.Discard, o)
+			if e == nil || code == 0 {
+				t.Fatal("debugger wait reported ready")
+			}
+			b, e = os.ReadFile(filepath.Join(cfg.Root, "debug-env"))
+			if e != nil {
+				t.Fatal(e)
+			}
+			want := ""
+			if port != 0 {
+				want = "gdbserver --no-disable-randomization :2345"
+			}
+			if string(b) != want {
+				t.Fatalf("debug env %q", b)
+			}
+			assertFailedLifecycle(t, s)
+		})
+	}
+}
+func TestDebugMissingToolFailsBeforeSpawn(t *testing.T) {
+	cfg, o := fixtureConfig(t, "fail")
+	cfg.Launch.DebugPort = 2345
+	t.Setenv("PATH", t.TempDir())
+	s := &recordSink{make(chan events.Event, 64)}
+	code, e := runWith(context.Background(), cfg, s, nil, io.Discard, io.Discard, o)
+	if code == 0 || e == nil || !strings.Contains(e.Error(), "gdbserver") {
+		t.Fatalf("missing debugger: %d %v", code, e)
+	}
+	if _, e = os.Stat(filepath.Join(cfg.Root, "spawned")); !os.IsNotExist(e) {
+		t.Fatal("spawned without debugger")
+	}
+	assertFailedLifecycle(t, s)
+}
+func assertFailedLifecycle(t *testing.T, s *recordSink) events.Event {
+	t.Helper()
+	var kinds []string
+	var failed events.Event
+	for len(s.ch) > 0 {
+		e := <-s.ch
+		switch e.Type {
+		case "server.start_failed", "server.up", "server.down", "server.crash":
+			kinds = append(kinds, e.Type)
+			if e.Type == "server.start_failed" {
+				failed = e
+			}
+		}
+	}
+	if fmt.Sprint(kinds) != "[server.start_failed]" {
+		t.Fatalf("complete lifecycle sequence %v", kinds)
+	}
+	return failed
+}
+
+type hookTransport struct{ target *url.URL }
+
+func (r hookTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	cp := req.Clone(req.Context())
+	u := *req.URL
+	u.Host = r.target.Host
+	u.Scheme = r.target.Scheme
+	cp.URL = &u
+	return http.DefaultTransport.RoundTrip(cp)
+}
+func TestRuntimeWebhookTransitions(t *testing.T) {
+	for _, tt := range []struct {
+		mode, command string
+		want          []string
+	}{{"ready", "quit", []string{"server.up", "server.down"}}, {"ready", "crash", []string{"server.up", "server.down", "server.crash"}}, {"unready", "", []string{"server.start_failed"}}, {"fail", "", []string{"server.start_failed"}}} {
+		t.Run(tt.mode+tt.command, func(t *testing.T) {
+			cfg, o := fixtureConfig(t, tt.mode)
+			var mu sync.Mutex
+			var kinds []string
+			var ids []string
+			up := make(chan struct{})
+			h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var p struct{ Content string }
+				json.NewDecoder(r.Body).Decode(&p)
+				lines := strings.Split(p.Content, "\n")
+				mu.Lock()
+				kinds = append(kinds, lines[0])
+				ids = append(ids, lines[3])
+				mu.Unlock()
+				if lines[0] == "server.up" {
+					close(up)
+				}
+				io.WriteString(w, `{"id":"ok"}`)
+			}))
+			defer h.Close()
+			u, _ := url.Parse(h.URL)
+			d, e := alerts.NewDiscord(alerts.Config{URL: "https://discord.com/api/webhooks/1/fixture"}, &http.Client{Transport: hookTransport{u}})
+			if e != nil {
+				t.Fatal(e)
+			}
+			r, w := io.Pipe()
+			defer w.Close()
+			done := make(chan struct{})
+			go func() { runWith(context.Background(), cfg, d, r, io.Discard, io.Discard, o); close(done) }()
+			if tt.command != "" {
+				select {
+				case <-up:
+				case <-time.After(3 * time.Second):
+					t.Fatal("missing up webhook")
+				}
+				fmt.Fprintln(w, tt.command)
+			}
+			select {
+			case <-done:
+			case <-time.After(3 * time.Second):
+				t.Fatal("runtime blocked")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if e = d.Close(ctx); e != nil {
+				t.Fatal(e)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if fmt.Sprint(kinds) != fmt.Sprint(tt.want) {
+				t.Fatalf("complete transition sequence %v want %v", kinds, tt.want)
+			}
+			seen := map[string]bool{}
+			for _, id := range ids {
+				if seen[id] {
+					t.Fatal("transition event ID reused")
+				}
+				seen[id] = true
+			}
+		})
+	}
+}
+func TestSlowWebhookDoesNotBlockRuntimeStop(t *testing.T) {
+	cfg, o := fixtureConfig(t, "ready")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer func() { close(release); h.Close() }()
+	u, _ := url.Parse(h.URL)
+	d, e := alerts.NewDiscord(alerts.Config{URL: "https://discord.com/api/webhooks/1/fixture"}, &http.Client{Transport: hookTransport{u}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { runWith(ctx, cfg, d, nil, io.Discard, io.Discard, o); close(done) }()
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no webhook")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("webhook blocked runtime stop")
+	}
+	closeCtx, stop := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer stop()
+	if d.Close(closeCtx) == nil {
+		t.Fatal("expected bounded flush timeout")
 	}
 }

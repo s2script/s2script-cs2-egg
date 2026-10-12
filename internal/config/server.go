@@ -55,6 +55,7 @@ type PluginPolicy struct {
 	Overrides map[string]bool `json:"-"`
 }
 type Launch struct {
+	DebugPort    int      `json:"debug_port"`
 	IP           string   `json:"ip"`
 	Port         int      `json:"port"`
 	Map          string   `json:"map"`
@@ -69,6 +70,8 @@ type Readiness struct {
 	PollIntervalSeconds int `json:"poll_interval_seconds"`
 }
 type Webhook struct {
+	QueueCapacity  int      `json:"queue_capacity"`
+	MaxRetries     int      `json:"max_retries"`
 	URL            string   `json:"url"`
 	Events         []string `json:"events"`
 	TimeoutSeconds int      `json:"timeout_seconds"`
@@ -131,7 +134,7 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 		Plugins:    PluginPolicy{File: "s2script-plugins.json", Bundled: map[string]bool{}, Overrides: map[string]bool{}},
 		Launch:     Launch{IP: "0.0.0.0", Port: 27015, Map: "de_dust2", MaxPlayers: 32},
 		Readiness:  Readiness{TimeoutSeconds: 120, PollIntervalSeconds: 1},
-		Webhook:    Webhook{Events: []string{"server.up", "server.down", "server.crash", "server.start_failed"}, TimeoutSeconds: 10},
+		Webhook:    Webhook{Events: []string{"server.up", "server.down", "server.crash", "server.start_failed"}, TimeoutSeconds: 10, QueueCapacity: 64, MaxRetries: 2},
 	}
 	for _, p := range catalog.Bundled() {
 		s.Plugins.Bundled[p.Name] = p.DefaultEnabled
@@ -178,7 +181,7 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 			*p = v
 		}
 	}
-	for k, p := range map[string]*int{"SRCDS_APPID": &s.Steam.AppID, "SERVER_PORT": &s.Launch.Port, "SRCDS_MAXPLAYERS": &s.Launch.MaxPlayers, "GAME_TYPE": &s.Launch.GameType, "GAME_MODE": &s.Launch.GameMode} {
+	for k, p := range map[string]*int{"SRCDS_APPID": &s.Steam.AppID, "SERVER_PORT": &s.Launch.Port, "SRCDS_MAXPLAYERS": &s.Launch.MaxPlayers, "GAME_TYPE": &s.Launch.GameType, "GAME_MODE": &s.Launch.GameMode, "GDB_DEBUG_PORT": &s.Launch.DebugPort} {
 		if v, ok := lookup(k); ok {
 			n, err := strconv.Atoi(v)
 			if err != nil {
@@ -209,6 +212,9 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 	}
 	if s.Launch.Port < 1 || s.Launch.Port > 65535 {
 		return fail(errors.New("SERVER_PORT must be in 1..65535"))
+	}
+	if s.Launch.DebugPort < 0 || s.Launch.DebugPort > 65535 || (s.Launch.DebugPort != 0 && s.Launch.DebugPort == s.Launch.Port) {
+		return fail(errors.New("GDB_DEBUG_PORT must be 0 (disabled) or 1..65535 distinct from SERVER_PORT"))
 	}
 	if s.Launch.MaxPlayers < 1 || s.Launch.MaxPlayers > 64 {
 		return fail(errors.New("SRCDS_MAXPLAYERS must be in 1..64"))
@@ -274,6 +280,9 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 	}
 	if s.Readiness.TimeoutSeconds < 1 || s.Readiness.TimeoutSeconds > 3600 || s.Readiness.PollIntervalSeconds < 1 || s.Readiness.PollIntervalSeconds > s.Readiness.TimeoutSeconds {
 		return fail(errors.New("invalid readiness timing"))
+	}
+	if s.Webhook.QueueCapacity < 1 || s.Webhook.QueueCapacity > 1024 || s.Webhook.MaxRetries < 0 || s.Webhook.MaxRetries > 10 {
+		return fail(errors.New("invalid webhook queue_capacity or max_retries"))
 	}
 	if s.Webhook.TimeoutSeconds < 1 || s.Webhook.TimeoutSeconds > 60 {
 		return fail(errors.New("invalid webhook timeout"))
