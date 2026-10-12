@@ -53,7 +53,7 @@ s2node shared-attach --config /etc/s2node/node.json \
   --server registered-id --generation GENERATION_ID --mode symlink
 ```
 
-The helper is a narrow typed boundary reusable by Task13 backup/restore; those operations are not implemented here. A runtime started outside the managed supervisor does not participate in the lease contract.
+The helper also supports the opt-in [backup/restore contract](backups.md). A runtime started outside the managed supervisor does not participate in the lease contract.
 
 ## Hardlink ownership and mount contract
 
@@ -71,6 +71,6 @@ Before requesting helper attachment, the daemon snapshots eligible reference ide
 
 To leave shared mode, stop the managed game and run `s2egg shared-standalone --root PATH`. It takes both locks, recovers, and examines links throughout the volume, including binaries, private files and explicit overrides. Hardlinked regular files become distinct writable inodes; symlinks are copied only when they name exact regular files in known generation manifests through pinned paths. Executable bits are preserved. Unknown/external/directory symlinks, linked control files, unavailable sources or any failed/interrupted copy produce an actionable error and retain the shared marker; arbitrary symlink targets are never read. Repair those entries while stopped and retry. Only a final scan confirming no links remain permits marker removal and standalone SteamCMD. Disable shared preparation for that server before its next standalone launch; merely disconnecting the node is insufficient until migration finishes. Host references remain conservative until separately reconciled.
 
-Task10 scheduling must use persisted stop → helper Attach → start phases for hardlink mode and no-mount copy mode. A single Wings restart cannot install their next generation and will fail preparation. Symlink/mounted-copy generations can materialize during normal stopped startup. No scheduler is implemented in this task.
+Coordinated update scheduling uses persisted stop → helper Attach → start phases for hardlink mode and no-mount copy mode. A single Wings restart cannot install their next generation and will fail preparation. Symlink/mounted-copy generations can materialize during normal stopped startup. See [updates and recovery](updates.md) for durable scheduler phases.
 
 Filesystem/unit tests include real EXDEV using separate temporary filesystems. The separately gated CI fixture uses two numeric subprocess UIDs within a freshly allocated isolated temporary root; it verifies0600 access and actual immutable hardlinks. Local unprivileged runs skip that fixture and do not claim cross-UID or live-container acceptance.

@@ -3,3 +3,5 @@
 /.env
 /.env.*
 /egg/server.json
+
+__pycache__/

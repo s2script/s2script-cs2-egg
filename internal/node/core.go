@@ -21,6 +21,7 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/nodetypes"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/server"
+	"github.com/s2script/s2script-cs2-egg/internal/storeio"
 )
 
 // runtimeContact is a reporting session, not a read-only socket observer.
@@ -28,6 +29,13 @@ import (
 type runtimeContact struct{ run string }
 
 type Core struct {
+	observers     map[*observer]struct{}
+	observed      map[string]string
+	observedOrder []string
+	sequence      uint64
+	sessionID     string
+	fences        map[string]*runFence
+
 	cfg            config.Node
 	sink           events.Sink
 	delivery       alerts.AcknowledgedDelivery
@@ -40,6 +48,7 @@ type Core struct {
 	modules        map[string]*moduleEntry
 	actions        map[string]*moduleEntry
 	state          deliveryState
+	lockHeld       bool
 	storageFailed  bool
 	stateDir, lock *os.File
 	wake           chan struct{}
@@ -50,7 +59,15 @@ func New(cfg config.Node, sink events.Sink) (*Core, error) {
 		return nil, e
 	}
 	cfg.Servers = append([]config.NodeServer(nil), cfg.Servers...)
-	c := &Core{cfg: cfg, sink: sink, ready: make(chan struct{}), servers: map[string]Server{}, statuses: map[string]server.Status{}, contacts: map[string]map[*runtimeContact]struct{}{}, modules: map[string]*moduleEntry{}, actions: map[string]*moduleEntry{}, state: deliveryState{Version: 1, NodeID: cfg.ID, Owners: map[string]string{}, Records: map[string]deliveryRecord{}}, wake: make(chan struct{}, 1)}
+	c := &Core{cfg: cfg, sink: sink, ready: make(chan struct{}), servers: map[string]Server{}, statuses: map[string]server.Status{}, contacts: map[string]map[*runtimeContact]struct{}{}, modules: map[string]*moduleEntry{}, actions: map[string]*moduleEntry{}, state: deliveryState{Version: 2, NodeID: cfg.ID, Owners: map[string]string{}, Records: map[string]deliveryRecord{}}, wake: make(chan struct{}, 1), observers: map[*observer]struct{}{}, observed: map[string]string{}, fences: map[string]*runFence{}, sessionID: storeio.ID()}
+	if !c.safeIdentifiers(cfg.ID) {
+		return nil, errors.New("secret-bearing configured identity refused")
+	}
+	for _, s := range cfg.Servers {
+		if !c.safeIdentifiers(s.ID) {
+			return nil, errors.New("secret-bearing configured identity refused")
+		}
+	}
 	if d, ok := sink.(alerts.AcknowledgedDelivery); ok && d.Enabled() {
 		c.delivery = d
 	}
@@ -84,7 +101,7 @@ func (c *Core) Servers() []Server {
 	defer c.mu.Unlock()
 	out := make([]Server, 0, len(c.servers))
 	for _, s := range c.servers {
-		out = append(out, s)
+		out = append(out, copyServer(s))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
@@ -112,7 +129,7 @@ func (c *Core) Status(id string) server.Status {
 		s.Players = server.Players{}
 		s.Ready = false
 	}
-	return s
+	return c.cleanStatus(s)
 }
 func (c *Core) Publish(ctx context.Context, e events.Event) error {
 	if err := ctx.Err(); err != nil {
@@ -121,7 +138,7 @@ func (c *Core) Publish(ctx context.Context, e events.Event) error {
 	if _, ok := c.servers[e.ServerID]; !ok {
 		return errors.New("unknown configured server")
 	}
-	_, err := c.admit(e.ServerID, e)
+	_, err := c.admitSource(e.ServerID, e, "local_runtime")
 	return err
 }
 func (c *Core) Dispatch(ctx context.Context, id, action string, payload any) (any, error) {
@@ -277,7 +294,17 @@ func (c *Core) serve(ctx context.Context, l *net.UnixListener, id string, uid ui
 					}
 					available := []string{protocol.CapStatus}
 					if admin {
+						available = append(available, protocol.CapOperations)
 						c.mu.Lock()
+						if c.actions[protocol.CapProjectUpdate] != nil {
+							available = append(available, protocol.CapProjectUpdate)
+						}
+						if c.actions[protocol.CapGuardAdmin] != nil {
+							available = append(available, protocol.CapGuardAdmin)
+						}
+						if c.actions[protocol.CapBackupAdmin] != nil {
+							available = append(available, protocol.CapBackupAdmin)
+						}
 						if c.actions[protocol.CapUpdateAdmin] != nil {
 							available = append(available, protocol.CapUpdateAdmin)
 						}
@@ -287,7 +314,7 @@ func (c *Core) serve(ctx context.Context, l *net.UnixListener, id string, uid ui
 						available = append(available, protocol.CapEvents)
 						c.mu.Lock()
 						for cap := range c.actions {
-							if cap != protocol.CapUpdateExecute && cap != protocol.CapUpdateAdmin {
+							if cap != protocol.CapProjectUpdate && cap != protocol.CapGuardAdmin && cap != protocol.CapBackupAdmin && cap != protocol.CapOperations && cap != protocol.CapUpdateExecute && cap != protocol.CapUpdateAdmin {
 								available = append(available, cap)
 							}
 						}
@@ -367,6 +394,30 @@ func (c *Core) handle(ctx context.Context, id string, admin bool, caps map[strin
 		return nil, errors.New("capability was not negotiated")
 	}
 	switch m.Type {
+	case protocol.CapProjectUpdate, protocol.CapGuardAdmin, protocol.CapBackupAdmin:
+		if !admin {
+			return nil, errors.New("administrator socket required")
+		}
+		return c.invoke(ctx, Server{}, m.Type, m)
+	case protocol.CapOperations:
+		if !admin {
+			return nil, errors.New("administrator socket required")
+		}
+		var r protocol.OperationsRequest
+		if protocol.Decode(m.Payload, &r) != nil {
+			return nil, errors.New("invalid operations request")
+		}
+		switch r.Operation {
+		case "archive":
+			return c.Archive(ctx)
+		case "archive-status":
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			return c.archiveUsage(), nil
+		case "finalize":
+			return struct{}{}, c.FinalizeRun(ctx, r.ServerID, r.RunID)
+		}
+		return c.invoke(ctx, Server{}, protocol.CapOperations, m)
 	case "status":
 		if protocol.Decode(m.Payload, &struct{}{}) != nil {
 			return nil, errors.New("status takes no server selector")
@@ -387,8 +438,11 @@ func (c *Core) handle(ctx context.Context, id string, admin bool, caps map[strin
 			return nil, errors.New("server socket required")
 		}
 		var s server.Status
-		if protocol.Decode(m.Payload, &s) != nil || s.RunID == "" || len(s.RunID) > 128 {
+		if len(m.Payload) > 16<<10 || protocol.Decode(m.Payload, &s) != nil || s.RunID == "" || len(s.RunID) > 128 {
 			return nil, errors.New("invalid runtime status")
+		}
+		if !c.safeIdentifiers(s.RunID, s.ScheduledActionID) {
+			return nil, errors.New("secret-bearing status identity refused")
 		}
 		switch s.State {
 		case "preparing", "starting", "ready", "unresponsive", "stopping", "stopped":
@@ -403,6 +457,7 @@ func (c *Core) handle(ctx context.Context, id string, admin bool, caps map[strin
 			c.mu.Unlock()
 			return nil, errors.New("status belongs to a different negotiated run")
 		}
+		c.touch(key(id, s.RunID))
 		c.reportContactLocked(id, s.RunID, contact)
 		// A terminal observation dominates queued same-run reports. The runtime
 		// deliberately delivers lifecycle events ahead of raw status backlog.

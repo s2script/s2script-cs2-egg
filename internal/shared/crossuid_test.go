@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
+	"github.com/s2script/s2script-cs2-egg/internal/backup"
 	node "github.com/s2script/s2script-cs2-egg/internal/nodetypes"
+	"github.com/s2script/s2script-cs2-egg/internal/privateops"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
 	"github.com/s2script/s2script-cs2-egg/internal/workshop"
@@ -59,7 +61,7 @@ func TestCrossUIDHelperFixture(t *testing.T) {
 		name     string
 		uid, gid int
 		mode     os.FileMode
-	}{{"workshop", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"store", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"volume", fixtureRuntimeUID, fixtureRuntimeUID, 0750}, {"volume/egg", fixtureRuntimeUID, fixtureRuntimeUID, 0770}, {"socket", fixtureRuntimeUID, fixtureRuntimeUID, 0770}} {
+	}{{"backup", fixtureRuntimeUID, fixtureRuntimeUID, 0700}, {"ops", fixtureRuntimeUID, fixtureRuntimeUID, 0700}, {"workshop", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"store", fixtureDaemonUID, fixtureDaemonUID, 0755}, {"volume", fixtureRuntimeUID, fixtureRuntimeUID, 0750}, {"volume/egg", fixtureRuntimeUID, fixtureRuntimeUID, 0770}, {"socket", fixtureRuntimeUID, fixtureRuntimeUID, 0770}} {
 		p := filepath.Join(base, v.name)
 		if e = os.Mkdir(p, v.mode); e != nil {
 			t.Fatal(e)
@@ -135,6 +137,98 @@ func TestCrossUIDHelperFixture(t *testing.T) {
 			t.Fatalf("private identity/mode changed: %s %v", name, e)
 		}
 	}
+	// An independent operations-only helper proves this route needs no shared
+	// store and crosses the same actual UID boundary while preserving 0600 files.
+	opsHelper := command("operations-helper", fixtureRuntimeUID)
+	var opsLog bytes.Buffer
+	opsHelper.Stdout = &opsLog
+	opsHelper.Stderr = &opsLog
+	if e = opsHelper.Start(); e != nil {
+		t.Fatal(e)
+	}
+	defer func() {
+		opsHelper.Process.Kill()
+		opsHelper.Wait()
+		if t.Failed() {
+			t.Log(opsLog.String())
+		}
+	}()
+	waitFile := func(name string) {
+		t.Helper()
+		until := time.Now().Add(5 * time.Second)
+		for {
+			if _, e := os.Stat(filepath.Join(base, name)); e == nil {
+				return
+			}
+			if time.Now().After(until) {
+				t.Fatalf("fixture did not create %s", name)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitFile("socket/ops.sock")
+	holder := command("operations-lease", fixtureRuntimeUID)
+	var holdLog bytes.Buffer
+	holder.Stdout = &holdLog
+	holder.Stderr = &holdLog
+	if e = holder.Start(); e != nil {
+		t.Fatal(e)
+	}
+	defer func() {
+		if holder.ProcessState == nil {
+			holder.Process.Kill()
+			holder.Wait()
+		}
+	}()
+	waitFile("socket/lease-ready")
+	for _, role := range []struct {
+		name string
+		uid  uint32
+	}{{"operations-live", fixtureDaemonUID}, {"backup-live", fixtureDaemonUID}} {
+		b, e := command(role.name, role.uid).CombinedOutput()
+		if e != nil {
+			t.Fatalf("%s: %v\n%s", role.name, e, b)
+		}
+		t.Logf("%s subprocess: %s", role.name, b)
+	}
+	if e = os.WriteFile(filepath.Join(base, "socket/lease-stop"), nil, 0644); e != nil {
+		t.Fatal(e)
+	}
+	if e = holder.Wait(); e != nil {
+		t.Fatalf("lease fixture: %v %s", e, holdLog.String())
+	}
+	for _, role := range []struct {
+		name string
+		uid  uint32
+	}{{"operations-wrong-peer", fixtureRuntimeUID}, {"backup-wrong-peer", fixtureRuntimeUID}, {"backup-stopped", fixtureDaemonUID}} {
+		b, e := command(role.name, role.uid).CombinedOutput()
+		if e != nil {
+			t.Fatalf("%s: %v\n%s", role.name, e, b)
+		}
+		t.Logf("%s stopped distinct-UID subprocess: %s", role.name, b)
+	}
+	b, e := command("operations-stopped", fixtureDaemonUID).CombinedOutput()
+	if e != nil {
+		t.Fatalf("operations-stopped: %v\n%s", e, b)
+	}
+	t.Logf("operations-only distinct-UID subprocess: %s", b)
+	entries, e := os.ReadDir(filepath.Join(base, "ops/dumps"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	dumps := 0
+	for _, f := range entries {
+		if strings.HasSuffix(f.Name(), ".dmp") {
+			info, e := f.Info()
+			if e != nil || info.Mode().Perm() != 0600 || info.Sys().(*syscall.Stat_t).Uid != fixtureRuntimeUID {
+				t.Fatal("private retained dump identity changed", e)
+			}
+			dumps++
+		}
+	}
+	if dumps != 1 {
+		t.Fatal("missing private dump", dumps)
+	}
 	info, e := os.Stat(filepath.Join(base, "volume/game/csgo/pak01.vpk"))
 	if e != nil || info.Sys().(*syscall.Stat_t).Uid != fixtureDaemonUID || info.Mode().Perm() != 0444 {
 		t.Fatal("hardlink ownership/mode contract broken", e)
@@ -171,6 +265,90 @@ func TestCrossUIDFixtureChild(t *testing.T) {
 	workshopRoot := filepath.Join(base, "workshop")
 	socket := filepath.Join(base, "socket/helper.sock")
 	switch role {
+	case "operations-helper":
+		if os.Geteuid() != fixtureRuntimeUID {
+			t.Fatal("wrong operations helper UID")
+		}
+		put(t, volume, "dumps/private.dmp", "sensitive fixture binary\x00")
+		e := RunHelper(context.Background(), HelperConfig{Volume: volume, Socket: filepath.Join(base, "socket/ops.sock"), NodeUID: fixtureDaemonUID, RuntimeUID: fixtureRuntimeUID, AccessGID: fixtureRuntimeUID, Backup: &backup.Policy{Root: filepath.Join(base, "backup"), RootID: "fixture", ServerID: "one", MinFreeBytes: 64 << 20}, Operations: &privateops.Policy{Enabled: true, Root: filepath.Join(base, "ops"), ServerID: "one", DumpSource: "dumps", Dumps: true}})
+		t.Fatal(e)
+	case "backup-live", "backup-stopped", "backup-wrong-peer":
+		srv := node.Server{ID: "one", Volume: volume, Helper: &node.PrivateHelper{Socket: filepath.Join(base, "socket/ops.sock"), UID: fixtureRuntimeUID, GID: fixtureRuntimeUID}}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		m, e := backup.Create(ctx, srv, backup.Options{})
+		if role != "backup-stopped" {
+			if e == nil {
+				t.Fatal("live or unauthorized backup accepted")
+			}
+			return
+		}
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = os.ReadFile(filepath.Join(volume, "game/csgo/cfg/server.cfg")); e == nil {
+			t.Fatal("node read private backup input directly")
+		}
+		if _, e = os.ReadFile(filepath.Join(base, "backup", "archives", m.BackupID, "archive.tar.gz")); e == nil {
+			t.Fatal("node read private archive directly")
+		}
+		p, e := backup.PreviewRestore(ctx, srv, m.BackupID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if e = backup.Restore(ctx, srv, p); e != nil {
+			t.Fatal(e)
+		}
+		i, e := os.Stat(filepath.Join(volume, "game/csgo/cfg/server.cfg"))
+		if e != nil || i.Mode().Perm() != 0600 || i.Sys().(*syscall.Stat_t).Uid != fixtureRuntimeUID || i.Sys().(*syscall.Stat_t).Gid != fixtureRuntimeUID {
+			t.Fatal("backup restore changed private metadata", e)
+		}
+	case "operations-lease":
+		release, e := runtimelease.Acquire(volume)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer release()
+		if e = os.WriteFile(filepath.Join(base, "socket/lease-ready"), nil, 0644); e != nil {
+			t.Fatal(e)
+		}
+		until := time.Now().Add(15 * time.Second)
+		for {
+			if _, e = os.Stat(filepath.Join(base, "socket/lease-stop")); e == nil {
+				return
+			}
+			if time.Now().After(until) {
+				t.Fatal("lease stop timeout")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	case "operations-live", "operations-stopped", "operations-wrong-peer":
+		expected := fixtureDaemonUID
+		if role == "operations-wrong-peer" {
+			expected = fixtureRuntimeUID
+		}
+		if os.Geteuid() != expected {
+			t.Fatal("wrong operation client UID")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		r, e := privateops.Call(ctx, filepath.Join(base, "socket/ops.sock"), fixtureRuntimeUID, privateops.Request{Operation: "dump-retain", RequestID: "crossuid-fixed", ID: "private.dmp"})
+		if role != "operations-stopped" {
+			if e == nil {
+				t.Fatal("live or wrong-peer operation accepted")
+			}
+			return
+		}
+		if e != nil || r.ID == "" || !r.Sensitive {
+			t.Fatal("stopped private operation failed", r, e)
+		}
+		if _, e = os.ReadFile(filepath.Join(volume, "dumps/private.dmp")); e == nil {
+			t.Fatal("node UID read private source directly")
+		}
+		read, e := privateops.Call(ctx, filepath.Join(base, "socket/ops.sock"), fixtureRuntimeUID, privateops.Request{Operation: "read", Namespace: "dumps", ID: r.ID, Limit: 65536})
+		if e != nil || string(read.Data) != "sensitive fixture binary\x00" || !read.Sensitive {
+			t.Fatal("private export failed", read, e)
+		}
 	case "helper":
 		if os.Geteuid() != fixtureRuntimeUID {
 			t.Fatal("wrong helper UID")

@@ -1,0 +1,20 @@
+{
+  "volume": "/var/lib/pterodactyl/volumes/SERVER_ID",
+  "socket": "/run/s2node-helper-SERVER_ID/helper.sock",
+  "node_uid": 991,
+  "runtime_uid": 1000,
+  "access_gid": 2000,
+  "backup": {
+    "root": "/srv/s2node-backups/SERVER_ID",
+    "root_id": "replace-with-a-stable-unique-root-id",
+    "server_id": "SERVER_ID",
+    "include": [],
+    "exclude": [],
+    "min_free_bytes": 4294967296,
+    "retention": {
+      "count": 7,
+      "age_days": 30,
+      "bytes": 68719476736
+    }
+  }
+}

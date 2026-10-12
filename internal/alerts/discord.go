@@ -14,10 +14,10 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/s2script/s2script-cs2-egg/internal/events"
+	"github.com/s2script/s2script-cs2-egg/internal/redaction"
 )
 
 var hookPath = regexp.MustCompile(`^/api(?:/v[0-9]+)?/webhooks/[0-9]+/[A-Za-z0-9_-]+$`)
@@ -47,7 +47,7 @@ func NewDiscord(cfg Config, client *http.Client) (*Dispatcher, error) {
 			kind = "server.start_failed"
 		}
 		switch kind {
-		case "server.up", "server.down", "server.crash", "server.start_failed", "server.restart", "server.update", "backup", "guard":
+		case "server.up", "server.down", "server.crash", "server.start_failed", "server.restart", "server.update", "backup", "restore", "guard", "node.update", "crash.bundle", "cleanup":
 			selected[kind] = true
 		default:
 			return nil, errors.New("unsupported webhook event selection")
@@ -65,6 +65,12 @@ func NewDiscord(cfg Config, client *http.Client) (*Dispatcher, error) {
 }
 func (d *Dispatcher) payload(e events.Event) []byte {
 	text := fmt.Sprintf("%s\nServer: %s\nRun: %s\nEvent: %s\nAt: %s\nReason: %s", e.Type, e.ServerID, e.RunID, e.ID, e.At.UTC().Format(time.RFC3339), e.Reason)
+	if e.Origin == "host" {
+		text = fmt.Sprintf("%s\nNode: %s\nProducer: %s\nAction: %s\nEvent: %s\nAt: %s\nReason: %s", e.Type, e.NodeID, e.Producer, e.ActionID, e.ID, e.At.UTC().Format(time.RFC3339), e.Reason)
+	}
+	if e.Origin == "host" && e.ServerID != "" {
+		text += "\nServer: " + e.ServerID
+	}
 	keys := make([]string, 0, len(e.Details))
 	for k := range e.Details {
 		keys = append(keys, k)
@@ -73,12 +79,7 @@ func (d *Dispatcher) payload(e events.Event) []byte {
 	for _, k := range keys {
 		text += "\n" + k + ": " + e.Details[k]
 	}
-	text = strings.ReplaceAll(text, d.cfg.URL, "[REDACTED]")
-	u, _ := url.Parse(d.cfg.URL)
-	token := u.Path[strings.LastIndex(u.Path, "/")+1:]
-	if token != "" {
-		text = strings.ReplaceAll(text, token, "[REDACTED]")
-	}
+	text = redaction.Redact(text, redaction.Secrets(d.cfg.URL))
 	chars := []rune(text)
 	if len(chars) > 1900 {
 		text = string(chars[:1899]) + "…"

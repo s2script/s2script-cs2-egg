@@ -27,12 +27,21 @@ type moduleEntry struct {
 	mu     sync.Mutex
 }
 type moduleHost struct {
-	core   *Core
-	grants map[string]bool
+	producer string
+	core     *Core
+	grants   map[string]bool
 }
 
-func (h moduleHost) Servers() []Server              { return h.core.Servers() }
-func (h moduleHost) Status(id string) server.Status { return h.core.Status(id) }
+func (h moduleHost) Subscribe(n int) (*nodetypes.Subscription, error) { return h.core.Subscribe(n) }
+func (h moduleHost) PublishOperational(ctx context.Context, e events.OperationalEvent) (events.Admission, error) {
+	if !h.grants[nodetypes.GrantOperationalEvents] {
+		return events.Admission{}, errors.New("no operational event grant")
+	}
+	return h.core.publishOperational(ctx, h.producer, e)
+}
+func (h moduleHost) ModuleHealth() map[string]Health { return h.core.ModuleHealth() }
+func (h moduleHost) Servers() []Server               { return h.core.Servers() }
+func (h moduleHost) Status(id string) server.Status  { return h.core.Status(id) }
 func (h moduleHost) Publish(ctx context.Context, e events.Event) error {
 	if !h.grants[protocol.CapEvents] {
 		return errors.New("module has no event publishing grant")
@@ -56,7 +65,7 @@ func (c *Core) AddModule(m Module, grants []string) error {
 	}
 	g := map[string]bool{}
 	for _, grant := range grants {
-		if !knownCapability(grant) {
+		if !knownCapability(grant) && grant != nodetypes.GrantOperationalEvents {
 			return errors.New("unknown module grant")
 		}
 		g[grant] = true
@@ -66,7 +75,7 @@ func (c *Core) AddModule(m Module, grants []string) error {
 }
 func knownCapability(cap string) bool {
 	switch cap {
-	case protocol.CapEvents, protocol.CapStatus, protocol.CapPrepare, protocol.CapCache, protocol.CapWorkshop, protocol.CapRestart, protocol.CapUpdateControl, protocol.CapUpdateExecute, protocol.CapUpdateAdmin:
+	case protocol.CapProjectUpdate, protocol.CapGuardAdmin, protocol.CapBackupAdmin, protocol.CapOperations, protocol.CapEvents, protocol.CapStatus, protocol.CapPrepare, protocol.CapCache, protocol.CapWorkshop, protocol.CapRestart, protocol.CapUpdateControl, protocol.CapUpdateExecute, protocol.CapUpdateAdmin:
 		return true
 	}
 	return false
@@ -111,7 +120,9 @@ func (c *Core) ModuleHealth() map[string]Health {
 }
 func (c *Core) startModules(ctx context.Context) {
 	for _, m := range c.modules {
-		err := safeModule(func() error { return m.module.Start(ctx, moduleHost{core: c, grants: m.grants}) })
+		err := safeModule(func() error {
+			return m.module.Start(ctx, moduleHost{core: c, grants: m.grants, producer: m.module.Name()})
+		})
 		var capabilities []string
 		if err == nil {
 			if a, ok := m.module.(Actions); ok {
@@ -169,4 +180,24 @@ func (c *Core) invoke(ctx context.Context, s Server, cap string, msg protocol.Me
 		m.mu.Unlock()
 	}
 	return
+}
+
+// InitializationReady checks initialization only, without depending on external
+// Steam, Wings, Discord or game availability after a module has started.
+func (c *Core) InitializationReady(names []string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, name := range names {
+		m := c.modules[name]
+		if m == nil {
+			return fmt.Errorf("required module %s is not configured", name)
+		}
+		m.mu.Lock()
+		failed := m.health.Status == "failed"
+		m.mu.Unlock()
+		if failed {
+			return fmt.Errorf("required module %s failed initialization", name)
+		}
+	}
+	return nil
 }

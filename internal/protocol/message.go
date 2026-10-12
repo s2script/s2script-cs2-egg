@@ -15,6 +15,10 @@ const Version = 1
 const MaxFrame = 1 << 20
 const Timeout = 5 * time.Second
 const (
+	CapProjectUpdate = "project.update"
+	CapGuardAdmin    = "guard.admin"
+	CapBackupAdmin   = "backup.admin"
+	CapOperations    = "operations.admin"
 	CapStatus        = "status"
 	CapEvents        = "events"
 	CapPrepare       = "game.prepare"
@@ -235,4 +239,18 @@ func Read(r io.Reader) (Message, error) {
 	}
 	e := Decode(b, &m)
 	return m, e
+}
+
+type OperationsRequest struct {
+	Operation  string `json:"operation"`
+	ServerID   string `json:"server_id,omitempty"`
+	RunID      string `json:"run_id,omitempty"`
+	ID         string `json:"id,omitempty"`
+	RequestID  string `json:"request_id,omitempty"`
+	Namespace  string `json:"namespace,omitempty"`
+	Private    bool   `json:"private,omitempty"`
+	Offset     int64  `json:"offset,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
+	Retain     int    `json:"retain,omitempty"`
+	AgeSeconds int64  `json:"age_seconds,omitempty"`
 }

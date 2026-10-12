@@ -46,6 +46,9 @@ func (c *fixtureControl) Control(ctx context.Context, s Status) (protocol.Update
 }
 func TestRuntimeScheduledStopReportsCorrelatedTermination(t *testing.T) {
 	cfg, o := fixtureConfig(t, "ready")
+	// Control acknowledgements also exist while starting; wait for readiness
+	// before testing the down event of a previously ready process.
+	o.timeout = 3 * time.Second
 	control := &fixtureControl{ack: make(chan struct{})}
 	o.control = control
 	sink := &recordSink{ch: make(chan events.Event, 128)}
@@ -55,6 +58,7 @@ func TestRuntimeScheduledStopReportsCorrelatedTermination(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() { defer close(done); runWith(ctx, cfg, sink, in, io.Discard, io.Discard, o) }()
+	nextEvent(t, sink, "server.up")
 	select {
 	case <-control.ack:
 	case <-ctx.Done():

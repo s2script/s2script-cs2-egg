@@ -20,7 +20,7 @@ jobs:
           go-version: '1.27.2'
           cache: false # stdlib-only module has no go.sum
       - run: go test ./...
-      - name: Cross-UID shared helper (isolated ephemeral fixture only)
+      - name: Cross-UID shared, operations and backup helpers (isolated ephemeral fixture only)
         run: |
           CGO_ENABLED=0 go test -c -o /tmp/s2shared-permission.test ./internal/shared
           sudo env S2SHARED_PRIVILEGED_TEST=1 /tmp/s2shared-permission.test -test.run=^TestCrossUIDHelperFixture$ -test.v
@@ -31,6 +31,13 @@ jobs:
           CGO_ENABLED: '0'
           GOOS: linux
           GOARCH: amd64
+      - name: Release contract and examples (offline fixtures)
+        run: make release-check
+      - name: Validate actual public schema producers
+        run: |
+          python3 -m venv "$RUNNER_TEMP/schema"
+          "$RUNNER_TEMP/schema/bin/pip" install -r tests/schema-requirements.txt
+          make schema-check SCHEMA_PYTHON="$RUNNER_TEMP/schema/bin/python"
       - name: Check formatting
         run: test -z "$(gofmt -l cmd internal tests)"
   images:

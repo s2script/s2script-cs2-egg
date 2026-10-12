@@ -475,6 +475,14 @@ func PrepareWithFetcher(ctx context.Context, root string, s Selection, fetcher a
 			return prepared, e
 		}
 	}
+	if s.HUD == nil {
+		changes, facts, e := prepareHUDOff(live, stage)
+		if e != nil {
+			return prepared, e
+		}
+		prepared.Changes = append(prepared.Changes, changes...)
+		state.Managed = append(state.Managed, facts...)
+	}
 	gipath := filepath.Join(stage, "gameinfo.gi")
 	if e = os.WriteFile(gipath, gi, 0644); e != nil {
 		return prepared, e

@@ -5,14 +5,18 @@ Project code is licensed under the GNU General Public License, version 3
 or (at your option) any later version. See LICENSE for the complete text.
 
 CS2-Egg-Go by K4ryuu supplied the operational feature reference and its
-GPL-3.0-or-later licensing requirement. No upstream product module is imported. The container rootfs re-export
+GPL-3.0-or-later licensing requirement. The guard console grammar was researched/adapted
+from internal/egg/guard/guard.go at revision
+2ceeea15825b52856a7ef157e8bd70ffb7ab2cbf; detector, correlation, privilege
+and policy code is implemented here.
+No upstream product module is imported. The container rootfs re-export
 approach was adapted from its docker/KitsuneLab-Dockerfile at revision
 2ceeea15825b52856a7ef157e8bd70ffb7ab2cbf. Project adaptations remain GPL-3.0-or-later.
 https://github.com/K4ryuu/CS2-Egg-Go
 
 S2Script's plugin identities/default placements were researched against
 s2script/s2script revision 86d1de3ba7366b08f7e8bb0db34ca2a1e84415d7.
-No S2Script implementation code is included in this milestone.
+No S2Script implementation code is included.
 https://github.com/s2script/s2script
 
 LICENSE is verbatim GPL-3.0-or-later license text from the local SPDX license

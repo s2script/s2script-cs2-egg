@@ -16,9 +16,12 @@ import (
 
 	"github.com/s2script/s2script-cs2-egg/internal/alerts"
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
+	"github.com/s2script/s2script-cs2-egg/internal/buildinfo"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
+	"github.com/s2script/s2script-cs2-egg/internal/guard"
 	"github.com/s2script/s2script-cs2-egg/internal/nodeclient"
+	"github.com/s2script/s2script-cs2-egg/internal/observability"
 	"github.com/s2script/s2script-cs2-egg/internal/plugins"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
@@ -35,6 +38,10 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 	}
 	if len(args) == 0 {
 		return usage()
+	}
+	if len(args) == 1 && args[0] == "version" {
+		fmt.Fprintf(out, "s2egg %s (%s)\n", buildinfo.Version, buildinfo.Revision)
+		return 0
 	}
 	command := ""
 	switch args[0] {
@@ -96,6 +103,9 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 		}()
 		var sink events.Sink = dispatcher
 		options := runtime.Options{}
+		if server.Guard.Enabled {
+			options.ConsoleGuard = guard.NewLocal(server.Guard)
+		}
 		connectCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 		client, connectErr := nodeclient.Connect(connectCtx, filepath.Join(server.Root, "egg/s2node.sock"))
 		cancel()
@@ -111,6 +121,15 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 				options.ArtifactFetcher = client
 			}
 			options.ControlProvider = client
+		}
+		if server.Observability.Enabled {
+			local, err := observability.NewLocal(server, sink)
+			if err != nil {
+				fmt.Fprintln(errs, "local observability unavailable")
+				return 1
+			}
+			defer local.Close()
+			sink = local
 		}
 		code, e := runtime.Run(context.Background(), server, sink, os.Stdin, out, errs, options)
 		if e != nil {

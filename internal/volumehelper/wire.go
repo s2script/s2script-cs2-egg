@@ -61,3 +61,31 @@ func Read(c net.Conn) (protocol.Message, error) {
 	}
 	return m, e
 }
+
+// Session preserves legacy workshop framing while new closed operations use a
+// distinct fixed family. The caller authenticates Peer before constructing it.
+type Session struct {
+	Conn   net.Conn
+	Family string
+}
+
+func (s Session) Write(kind string, v any) error {
+	if s.Family != "operations" && s.Family != "backup" {
+		return errors.New("unsupported helper family")
+	}
+	b, e := json.Marshal(v)
+	if e != nil {
+		return e
+	}
+	return protocol.Write(s.Conn, protocol.Message{Version: protocol.Version, ID: s.Family, Type: kind, Payload: b})
+}
+func (s Session) Read(kind string, v any) error {
+	m, e := protocol.Read(s.Conn)
+	if e != nil {
+		return e
+	}
+	if m.Version != protocol.Version || m.ID != s.Family || m.Type != kind {
+		return errors.New("invalid private helper phase")
+	}
+	return protocol.Decode(m.Payload, v)
+}

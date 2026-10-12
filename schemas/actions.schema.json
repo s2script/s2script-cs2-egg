@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Typed private adapter action subset",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "status"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "project.update"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "enum": [
+                "status",
+                "check",
+                "stage",
+                "activate"
+              ]
+            },
+            "request_id": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 128
+            }
+          },
+          "required": [
+            "operation"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "update.admin"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "enum": [
+                "list",
+                "retry",
+                "cancel"
+              ]
+            },
+            "job_id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "allow_start": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "operation"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "restart.schedule"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "policy": {
+              "enum": [
+                "immediate",
+                "when_empty",
+                "maintenance_window"
+              ]
+            },
+            "max_delay_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 604800
+            },
+            "window_start": {
+              "type": "string"
+            },
+            "window_end": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "policy",
+            "max_delay_seconds"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "description": "Server-volume socket only. Reports an existing host-admitted pending update; does not create an arbitrary restart job."
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "guard.admin"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "enum": [
+                "info",
+                "preview",
+                "blocks",
+                "why",
+                "block",
+                "unblock",
+                "rates",
+                "refresh"
+              ]
+            },
+            "server_id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "request_id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "address": {
+              "type": "string",
+              "format": "ipv4"
+            },
+            "seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3600
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2048
+            }
+          },
+          "required": [
+            "operation"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "operations.admin"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "enum": [
+                "tail",
+                "list",
+                "read",
+                "job",
+                "archive-status"
+              ]
+            },
+            "server_id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "run_id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "request_id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "namespace": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "private": {
+              "type": "boolean"
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1048576
+            },
+            "retain": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "age_seconds": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "operation"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "payload"
+      ],
+      "properties": {
+        "type": {
+          "const": "backup.admin"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation"
+          ],
+          "properties": {
+            "operation": {
+              "enum": [
+                "job",
+                "list",
+                "document",
+                "status",
+                "create",
+                "preview",
+                "restore",
+                "recovery-release"
+              ]
+            },
+            "server_id": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "request_id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "id": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "confirm": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "mode": {
+              "enum": [
+                "consistent",
+                "live-best-effort"
+              ]
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "document": {
+              "type": "string",
+              "maxLength": 32
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$comment": "These are payload shapes, not authorization. Peer credentials, negotiated capabilities, scope and operation-specific policy remain mandatory. Mutations require stable request/job identities where applicable. No shell, path, URL or service execution action exists."
+}

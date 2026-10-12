@@ -1,33 +1,35 @@
-# Implementation status
+# Feature and evidence matrix
 
-This file records the standalone source-build milestone. The approved design remains prospective wherever a behavior is marked planned. Unit tests and generated JSON checks do not establish live-server or panel acceptance.
+The supported stack is Metamod + S2Script. CS2-Egg-Go is the operational
+reference; licensing/adaptation credits are in NOTICE. “Implemented” means the
+code and automated fixtures exist. Live game, panel, HUD and firewall acceptance
+is tracked separately in [acceptance.md](acceptance.md).
 
-| Capability | Status / evidence |
-| --- | --- |
-| Typed configuration, defaults, precedence, validation | Implemented; config tests cover invalid overrides, tokenless policy, schema/path validation, pins and quoted argument data |
-| Secret redaction and read-only config check/show | Implemented; JSON/formatting and CLI tests include GSLT/webhook redaction and no writes |
-| Read-only doctor | Implemented; checks local prerequisites only; does not assess game readiness |
-| Canonical bundled catalog and inherited controls | Implemented; 18 identities, 14 release-enabled / 4 disabled; generated documentation and egg controls share the catalog |
-| PTDL_v2 standalone egg JSON | Generated and structurally tested; live Pterodactyl/Pelican import not yet exercised |
-| Game startup, console, graceful stop | Implemented with process-group fixtures, signal/stdin forwarding and local A2S readiness; native CS2 acceptance and workshop management remain pending |
-| SteamCMD install/update/validation | Startup wired; image seed/writable HOME/SDK contract tested with subprocess fixtures; Dockerfile supplies verified immutable image seed; live install untested |
-| Metamod/S2Script preparation, version/channel pins, compatibility | Implemented as staged changes; official publisher digests, immutable source/API evidence, native pair/game-package checks and retained state/cache fallback; startup/CLI wiring implemented; live loading untested |
-| Verified artifact download/extraction and recoverable application | Implemented; bounded HTTPS/hash/archive handling, descriptor-safe paths and caller-held lock; consumers must Recover before launch |
-| Installed-plugin inventory and startup checks of every entry | Inventory/CLI implemented; reconciliation library checks every installed identity, including disabled/pinned/local/missing entries; startup invocation implemented |
-| Registry/release/local plugin discovery, dependency resolution, pins | Implemented as staged changes with published-interface contracts, verified bundle root/member evidence and policy-checked outage fallback; executable resolver wired; successful live registry acceptance not established |
-| Disabled plugin updates and persistent placement/config/data | Implemented in preparation and direct CLI moves; TLS/ZIP/transaction tests cover disabled updates, shared/exclusive dependencies, immutable pins, local preservation and config continuity |
-| HUD support and MultiAddonManager setup | Preparation library enforces minimum installed CS2 build, stages compatible helper and merges addon settings; live server/client rendering not tested |
-| Lifecycle webhook events and delivery | Raw runtime events and bounded filtered Discord dispatcher/CLI flushing implemented; complete lifecycle HTTP fixtures pass; no live webhook contacted |
-| Optional node daemon and narrow local protocol | Planned; no Docker socket or Wings admin credential in the container |
-| Shared game generations, cache, coordinated update/restart | Planned |
-| Backups/restores, workshop management, guard, scheduling | Planned |
-| Container targets and CI | Source-built non-root runtime/debug targets, pinned bases/actions, nonpublishing PR image builds and prerequisite smoke checks implemented; local Docker unavailable; remote CI outcomes require observation |
-| Public images/releases | Not published; build locally and retain source/image IDs; redistribution notices included |
-| Live CS2/Wings smoke/acceptance tests | Not run; runtime code is tested with fixtures; image/infrastructure and native acceptance are pending |
-| Companion Discord bot | Later separate project; outside this milestone |
+| Capability | Implementation and evidence | Operator guide |
+| --- | --- | --- |
+| Configuration, precedence, secret redaction | `internal/config`, CLI tests | [Configuration](configuration.md) |
+| Generated panel egg and 18 default controls | `internal/panel`, `internal/catalog`, generated-output tests | [Install](install.md), [catalog](bundled-plugins.md) |
+| SteamCMD bootstrap/install/update/validation | `internal/steam`, preparation/process fixtures; immutable image seed | [Runtime](runtime.md) |
+| Compatible Metamod/S2Script versions and pins | `internal/framework`, publisher/archive/pair tests | [Frameworks](frameworks.md) |
+| Installed inventory including disabled/local entries | `internal/plugins`, discovery and CLI tests | [Plugins](plugins.md) |
+| Registry resolution, dependencies, exact pins, outage fallback | Plugin TLS/ZIP/reconciliation fixtures | [Plugins](plugins.md) |
+| Disabled first install/update; config/data preservation | Transaction, placement, ownership and pin tests | [Plugins](plugins.md) |
+| Verified downloads and recoverable file application | `internal/artifact`, hash/archive/symlink/recovery tests | [Runtime](runtime.md) |
+| Supervised console, A2S readiness and graceful stop | `internal/server`, real process-group fixtures | [Runtime](runtime.md) |
+| Automatic CS2 checks and player/window-aware restart | `internal/scheduler`, `internal/wings`, durable job and race tests | [Updates](updates.md) |
+| Optional node, private peer identity and delivery ownership | `internal/node`, `internal/protocol`, peer/outbox fixtures | [Node](node.md) |
+| Immutable VPK/game sharing, symlink/copy/hardlink, safe fallback | `internal/shared`, lease/recovery tests and separate-UID CI | [Shared files](shared-files.md) |
+| Artifact cache and versioned/chunked workshop sharing | `internal/cache`, `internal/workshop`, metadata/quota/helper tests | [Workshop](workshop.md) |
+| Optional HUD/MultiAddonManager preparation | Framework game-build/dependency/config-merge fixtures; native rendering unrun | [Frameworks](frameworks.md) |
+| Discord lifecycle and operational events | `internal/alerts`, HTTP/schema/ownership tests; no real webhook posted | [Webhooks](webhooks.md) |
+| Bounded logs, text crash bundles, private metrics and cleanup | `internal/observability`, `internal/privateops`, `internal/crashes`, `internal/cleanup` | [Logging](logging.md), [cleanup](cleanup.md) |
+| Consistent backup, stopped restore, retention/recovery | `internal/backup`, archive/hash/preview/recovery tests and separate-UID CI | [Backups](backups.md) |
+| Conservative console guard and optional scoped nftables | `internal/guard`, parser/replay/ambiguity/policy/rule/helper tests | [Guard](guard.md) |
+| Verified node updates, private jobs, readiness and rollback | `internal/selfupdate`, release/launcher/real-child tests | [Project updates](project-updates.md) |
+| Future companion integration contract | Actual event/action schema tests; bot application/gateway intentionally separate | [Integrations](integrations.md) |
+| Runtime/debug images | Nonpublishing CI builds, non-root/seed/config smoke checks; native game unrun | [Install](install.md) |
+| Reproducible binaries/source and explicit release workflow | `internal/releasepack`, offline Git fixtures, no-clobber publication and anonymous verification | [Releases](releases.md) |
 
-The sole supported framework stack is Metamod plus S2Script. Operational feature parity uses CS2-Egg-Go as a reference, with initial credits and license provenance in the repository's README and NOTICE. No upstream product module has been copied. The Docker rootfs re-export approach is credited in NOTICE.
-
-The exact startup, status, event, SteamCMD, and future node contracts are documented in [runtime.md](runtime.md).
-
-Installation, webhook ownership/limits, debug settings and native acceptance are documented in [install.md](install.md), [webhooks.md](webhooks.md) and [testing.md](testing.md).
+Shared storage, host operations, guard and node self-updates require explicit
+operator configuration. Installing the standalone egg does not grant host
+privileges or automatically activate these modules.

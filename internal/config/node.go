@@ -40,17 +40,21 @@ type SharedNode struct {
 	ReserveBytes uint64 `json:"reserve_bytes"`
 }
 type Node struct {
-	Cache         CacheNode    `json:"cache"`
-	Workshop      WorkshopNode `json:"workshop"`
-	Updates       NodeUpdates  `json:"updates"`
-	Shared        SharedNode   `json:"shared"`
-	SchemaVersion int          `json:"schema_version"`
-	ID            string       `json:"id"`
-	StateDir      string       `json:"state_dir"`
-	AdminSocket   string       `json:"admin_socket"`
-	Servers       []NodeServer `json:"servers"`
-	Limits        NodeLimits   `json:"limits"`
-	Webhook       Webhook      `json:"webhook"`
+	ProjectUpdates ProjectUpdates `json:"project_updates"`
+	Guard          GuardNode      `json:"guard"`
+	Backup         BackupNode     `json:"backup"`
+	Observability  Observability  `json:"observability"`
+	Cache          CacheNode      `json:"cache"`
+	Workshop       WorkshopNode   `json:"workshop"`
+	Updates        NodeUpdates    `json:"updates"`
+	Shared         SharedNode     `json:"shared"`
+	SchemaVersion  int            `json:"schema_version"`
+	ID             string         `json:"id"`
+	StateDir       string         `json:"state_dir"`
+	AdminSocket    string         `json:"admin_socket"`
+	Servers        []NodeServer   `json:"servers"`
+	Limits         NodeLimits     `json:"limits"`
+	Webhook        Webhook        `json:"webhook"`
 }
 
 // Format uses the existing Webhook JSON redactor even for nested settings.
@@ -81,6 +85,15 @@ func LoadNode(path string) (Node, error) {
 const MaxNodeConfig = 1 << 20
 
 func (n *Node) Validate() error {
+	if e := n.Guard.Validate(); e != nil {
+		return e
+	}
+	if e := n.Backup.Validate(); e != nil {
+		return e
+	}
+	if e := n.Observability.Validate(); e != nil {
+		return e
+	}
 	if n.SchemaVersion != 1 || !nodeID.MatchString(n.ID) {
 		return errors.New("invalid node schema or identity")
 	}
@@ -156,6 +169,9 @@ func (n *Node) Validate() error {
 				}
 			}
 		}
+		if n.Guard.HelperSocket != "" && (overlaps(n.Guard.HelperSocket, s.Volume) || n.Guard.HelperUID == s.PeerUID) {
+			return errors.New("guard helper socket/UID must be separate from game containers")
+		}
 		ids[s.ID] = true
 		a := net.JoinHostPort(s.Allocation.IP, strconv.Itoa(s.Allocation.Port))
 		if allocations[a] {
@@ -172,6 +188,19 @@ func (n *Node) Validate() error {
 				return errors.New("registered volumes overlap")
 			}
 		}
+	}
+	for id := range n.Guard.Policies {
+		if !ids[id] {
+			return errors.New("guard policy references unregistered server")
+		}
+	}
+	for id := range n.Guard.Allocations {
+		if !ids[id] {
+			return errors.New("guard allocation references unregistered server")
+		}
+	}
+	if err := n.ProjectUpdates.Validate(n.StateDir); err != nil {
+		return err
 	}
 	return n.validateStores()
 }

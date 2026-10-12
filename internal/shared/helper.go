@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
+	"github.com/s2script/s2script-cs2-egg/internal/backup"
 	node "github.com/s2script/s2script-cs2-egg/internal/nodetypes"
+	"github.com/s2script/s2script-cs2-egg/internal/privateops"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
+	"github.com/s2script/s2script-cs2-egg/internal/releasecontract"
 	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
 	"github.com/s2script/s2script-cs2-egg/internal/volumehelper"
 	"github.com/s2script/s2script-cs2-egg/internal/workshop"
@@ -25,17 +28,19 @@ import (
 // RuntimeUID with AccessGID as a supplementary group, without any capabilities.
 // The socket and configuration must be outside all container mounts.
 type HelperConfig struct {
-	WorkshopRoot  string   `json:"workshop_root,omitempty"`
-	WorkshopMode  string   `json:"workshop_mode,omitempty"`
-	WorkshopMount string   `json:"workshop_mount,omitempty"`
-	WorkshopItems []string `json:"workshop_items,omitempty"`
-	Volume        string   `json:"volume"`
-	SharedRoot    string   `json:"shared_root"`
-	Socket        string   `json:"socket"`
-	NodeUID       uint32   `json:"node_uid"`
-	RuntimeUID    uint32   `json:"runtime_uid"`
-	AccessGID     int      `json:"access_gid"`
-	Overrides     []string `json:"overrides"`
+	Backup        *backup.Policy     `json:"backup,omitempty"`
+	Operations    *privateops.Policy `json:"operations,omitempty"`
+	WorkshopRoot  string             `json:"workshop_root,omitempty"`
+	WorkshopMode  string             `json:"workshop_mode,omitempty"`
+	WorkshopMount string             `json:"workshop_mount,omitempty"`
+	WorkshopItems []string           `json:"workshop_items,omitempty"`
+	Volume        string             `json:"volume"`
+	SharedRoot    string             `json:"shared_root"`
+	Socket        string             `json:"socket"`
+	NodeUID       uint32             `json:"node_uid"`
+	RuntimeUID    uint32             `json:"runtime_uid"`
+	AccessGID     int                `json:"access_gid"`
+	Overrides     []string           `json:"overrides"`
 }
 
 func LoadHelperConfig(path string) (HelperConfig, error) {
@@ -68,24 +73,69 @@ func LoadHelperConfig(path string) (HelperConfig, error) {
 	}
 	return c, nil
 }
-func (c HelperConfig) validate() error {
-	if c.Volume == "" || c.Socket == "" || c.SharedRoot == "" && c.WorkshopRoot == "" {
+
+// ValidateStructure checks policy without opening directories or proving provisioning.
+func (c HelperConfig) ValidateStructure() error {
+	if c.Volume == "" || c.Socket == "" || c.SharedRoot == "" && c.WorkshopRoot == "" && c.Operations == nil && c.Backup == nil {
 		return errors.New("fixed helper volume/socket/store required")
 	}
 	for _, p := range []string{c.Volume, c.SharedRoot, c.WorkshopRoot, c.Socket} {
-		if p == "" {
-			continue
-		}
-		if !filepath.IsAbs(p) || filepath.Clean(p) != p || p == "/" {
+		if p != "" && (!filepath.IsAbs(p) || filepath.Clean(p) != p || p == "/") {
 			return errors.New("helper paths must be fixed clean absolute paths")
 		}
 	}
-	if c.RuntimeUID != uint32(os.Geteuid()) || c.RuntimeUID == 0 || c.NodeUID == c.RuntimeUID || c.AccessGID < 0 {
-		return errors.New("helper needs actual non-root volume UID, distinct daemon UID and configured common GID")
+	if c.RuntimeUID == 0 || c.NodeUID == c.RuntimeUID || c.AccessGID < 0 {
+		return errors.New("helper needs non-root volume UID, distinct daemon UID and configured common GID")
 	}
 	overlap := func(a, b string) bool { return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/") }
 	if c.SharedRoot != "" && (overlap(c.Volume, c.SharedRoot) || overlap(c.Socket, c.SharedRoot)) || overlap(c.Socket, c.Volume) || c.WorkshopRoot != "" && (overlap(c.Volume, c.WorkshopRoot) || overlap(c.Socket, c.WorkshopRoot)) {
 		return errors.New("helper socket/store must be outside the private volume")
+	}
+	if c.Backup != nil {
+		if e := c.Backup.Validate(); e != nil {
+			return e
+		}
+		for _, p := range []string{c.Volume, c.Socket, c.SharedRoot, c.WorkshopRoot} {
+			if p != "" && overlap(c.Backup.Root, p) {
+				return errors.New("backup root must be separate from volume/socket/stores")
+			}
+		}
+		if c.Operations != nil && overlap(c.Backup.Root, c.Operations.Root) {
+			return errors.New("backup and operations roots must be separate")
+		}
+	}
+	if c.Operations != nil {
+		if e := c.Operations.Validate(); e != nil {
+			return e
+		}
+		if overlap(c.Operations.Root, c.Volume) || overlap(c.Operations.Root, c.Socket) || c.SharedRoot != "" && overlap(c.Operations.Root, c.SharedRoot) || c.WorkshopRoot != "" && overlap(c.Operations.Root, c.WorkshopRoot) {
+			return errors.New("operations root must be separate from volume/socket/stores")
+		}
+	}
+	return nil
+}
+func (c HelperConfig) validate() error {
+	if e := c.ValidateStructure(); e != nil {
+		return e
+	}
+	if c.RuntimeUID != uint32(os.Geteuid()) {
+		return errors.New("helper must run as configured non-root volume UID")
+	}
+	if c.Backup != nil {
+		if _, e := backup.Open(c.Volume, *c.Backup); e != nil {
+			return e
+		}
+	}
+	if c.Operations != nil {
+		d, e := artifact.OpenDirectory(c.Operations.Root)
+		if e != nil {
+			return e
+		}
+		i, e := d.Stat()
+		d.Close()
+		if e != nil || i.Sys().(*syscall.Stat_t).Uid != c.RuntimeUID || i.Mode().Perm()&0077 != 0 {
+			return errors.New("operations root must be private and runtime-UID-owned")
+		}
 	}
 	for _, p := range []string{c.Volume, c.SharedRoot, c.WorkshopRoot} {
 		if p == "" {
@@ -223,6 +273,41 @@ func helperSession(ctx context.Context, conn net.Conn, c HelperConfig) error {
 	first, e := protocol.Read(conn)
 	if e != nil {
 		return e
+	}
+	if first.Version == protocol.Version && first.ID == "discovery" && first.Type == "info" {
+		if protocol.Decode(first.Payload, &struct{}{}) != nil {
+			return errors.New("invalid discovery request")
+		}
+		h := releasecontract.Helper{DiscoveryVersion: 1, Protocol: releasecontract.Range{Min: 1, Max: 1}, Provides: []string{}, Requires: map[string][]string{}}
+		if c.SharedRoot != "" {
+			h.Provides = append(h.Provides, "shared.attach.v1")
+		}
+		if c.WorkshopRoot != "" {
+			h.Provides = append(h.Provides, "workshop.attach.v1")
+		}
+		if c.Operations != nil {
+			h.Provides = append(h.Provides, "operations.private.v1")
+		}
+		if c.Backup != nil {
+			h.Provides = append(h.Provides, "backup.catalog.v1")
+		}
+		b, err := json.Marshal(h)
+		if err != nil {
+			return err
+		}
+		return protocol.Write(conn, protocol.Message{Version: protocol.Version, ID: "discovery", Type: "info", Payload: b})
+	}
+	if first.Version == protocol.Version && first.ID == "backup" && first.Type == "begin" {
+		if c.Backup == nil {
+			return (volumehelper.Session{Conn: conn, Family: "backup"}).Write("result", backup.Reply{Error: "backup helper policy not configured"})
+		}
+		return backup.Serve(ctx, conn, c.Volume, *c.Backup, first)
+	}
+	if first.Version == protocol.Version && first.ID == "operations" && first.Type == "begin" {
+		if c.Operations == nil {
+			return (volumehelper.Session{Conn: conn, Family: "operations"}).Write("result", privateops.Reply{Error: "private operations not configured"})
+		}
+		return privateops.Serve(ctx, conn, c.Volume, *c.Operations, first)
 	}
 	if first.Version == protocol.Version && first.ID == "workshop" && first.Type == "begin-workshop" {
 		if c.WorkshopRoot == "" {

@@ -7,9 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/s2script/s2script-cs2-egg/internal/storeio"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"syscall"
 	"time"
@@ -23,11 +25,27 @@ const maxStateBytes = 32 << 20
 const maxEventBytes = 16 << 10
 
 type deliveryRecord struct {
-	Digest  string        `json:"digest"`
-	Event   *events.Event `json:"event,omitempty"`
-	Outcome string        `json:"outcome,omitempty"`
+	Host          bool          `json:"host,omitempty"`
+	RequestDigest string        `json:"request_digest,omitempty"`
+	Digest        string        `json:"digest"`
+	Event         *events.Event `json:"event,omitempty"`
+	Outcome       string        `json:"outcome,omitempty"`
+}
+type ownerMeta struct {
+	Server    string `json:"server"`
+	Run       string `json:"run"`
+	Revision  string `json:"revision"`
+	Finalized bool   `json:"finalized,omitempty"`
+}
+type archiveRef struct {
+	Name   string `json:"name"`
+	Digest string `json:"digest"`
+	Bytes  int64  `json:"bytes"`
 }
 type deliveryState struct {
+	Meta     map[string]ownerMeta `json:"owner_meta,omitempty"`
+	Archives []archiveRef         `json:"archives,omitempty"`
+
 	Version int                       `json:"version"`
 	NodeID  string                    `json:"node_id"`
 	Owners  map[string]string         `json:"owners"`
@@ -60,6 +78,7 @@ func (c *Core) openState() error {
 	if e = syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
 		return errors.New("node state is already in use")
 	}
+	c.lockHeld = true
 	path := c.statePath("delivery.json")
 	if info, e := os.Lstat(path); e == nil && (!info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0) {
 		return errors.New("delivery state must be a private regular file")
@@ -76,7 +95,7 @@ func (c *Core) openState() error {
 	if e != nil || len(b) > maxStateBytes {
 		return errors.New("invalid durable state size")
 	}
-	if json.Unmarshal(b, &c.state) != nil || c.state.Version != 1 || c.state.NodeID != c.cfg.ID || c.state.Owners == nil || c.state.Records == nil || len(c.state.Owners) > c.cfg.Limits.Runs || len(c.state.Records) > c.cfg.Limits.Records {
+	if json.Unmarshal(b, &c.state) != nil || c.state.Version != 2 || c.state.NodeID != c.cfg.ID || c.state.Owners == nil || c.state.Records == nil || len(c.state.Owners) > c.cfg.Limits.Runs || len(c.state.Records) > c.cfg.Limits.Records+2048 {
 		return errors.New("invalid durable state")
 	}
 	pending := 0
@@ -85,10 +104,11 @@ func (c *Core) openState() error {
 			pending++
 		}
 	}
-	if pending > c.cfg.Limits.Pending {
+	if pending > c.cfg.Limits.Pending+256 {
 		return errors.New("durable pending limit exceeded")
 	}
-	return nil
+	_, _, _, _, e = c.lookup("", "")
+	return e
 }
 func (c *Core) statePath(name string) string {
 	return filepath.Join("/proc/self/fd", fmtFD(c.stateDir), name)
@@ -127,18 +147,29 @@ func (c *Core) save(s deliveryState) error {
 	return nil
 }
 func (c *Core) copyState() deliveryState {
-	s := deliveryState{Version: 1, NodeID: c.cfg.ID, Owners: make(map[string]string, len(c.state.Owners)), Records: make(map[string]deliveryRecord, len(c.state.Records))}
+	s := deliveryState{Version: 2, NodeID: c.cfg.ID, Owners: map[string]string{}, Meta: map[string]ownerMeta{}, Records: map[string]deliveryRecord{}, Archives: append([]archiveRef(nil), c.state.Archives...)}
 	for k, v := range c.state.Owners {
 		s.Owners[k] = v
+	}
+	for k, v := range c.state.Meta {
+		s.Meta[k] = v
 	}
 	for k, v := range c.state.Records {
 		s.Records[k] = v
 	}
 	return s
 }
+func (c *Core) touch(k string) {
+	if f := c.fences[k]; f != nil {
+		f.valid = false
+	}
+}
 func (c *Core) claim(id, run string) (string, error) {
-	if run == "" || len(run) > 128 {
+	if run == "" || len(run) > 128 || !c.safeIdentifiers(id, run) {
 		return "", errors.New("invalid run identity")
+	}
+	if _, ok := c.servers[id]; !ok {
+		return "", errors.New("unknown server")
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -146,72 +177,109 @@ func (c *Core) claim(id, run string) (string, error) {
 		return "", errors.New("durable storage unavailable")
 	}
 	k := key(id, run)
-	if owner, ok := c.state.Owners[k]; ok {
+	owner, _, _, _, e := c.lookup(k, "")
+	if e != nil {
+		return "", e
+	}
+	c.touch(k)
+	if owner != "" {
 		return owner, nil
 	}
-	if len(c.state.Owners) >= c.cfg.Limits.Runs {
-		return "", errors.New("run ownership capacity exceeded")
+	if len(c.state.Owners) >= c.cfg.Limits.Runs || len(c.state.Meta) >= c.cfg.Limits.Runs {
+		return "", errors.New("run ownership capacity exceeded; archive completed evidence")
 	}
-	owner := "standalone"
+	owner = "standalone"
 	if c.delivery != nil {
 		owner = "node"
 	}
 	s := c.copyState()
 	s.Owners[k] = owner
-	if e := c.save(s); e != nil {
+	s.Meta[k] = ownerMeta{Server: id, Run: run, Revision: storeio.ID()}
+	if e = c.save(s); e != nil {
 		return "", e
 	}
 	c.statuses[id] = server.Status{RunID: run, State: "unknown", Versions: map[string]string{}}
 	return owner, nil
 }
 func (c *Core) admit(id string, e events.Event) (string, error) {
+	return c.admitSource(id, e, "container_report")
+}
+func (c *Core) admitSource(id string, e events.Event, source string) (string, error) {
 	e.ServerID = id
 	e.NodeID = c.cfg.ID
-	if e.Version != 1 || e.ID == "" || len(e.ID) > 128 || e.RunID == "" || len(e.RunID) > 128 || e.CorrelationID != e.RunID || e.At.IsZero() {
-		return "", errors.New("invalid event")
+	if !c.safeIdentifiers(e.ServerID, e.NodeID, e.ID, e.RunID, e.CorrelationID) {
+		return "", errors.New("secret-bearing event identifier refused")
+	}
+	if _, ok := c.servers[id]; !ok {
+		return "", errors.New("unknown server")
+	}
+	if e.Version != 1 || e.Origin != "" || e.Producer != "" || e.ActionID != "" || e.RelatedRunID != "" || e.ID == "" || len(e.ID) > 128 || e.RunID == "" || len(e.RunID) > 128 || e.CorrelationID != e.RunID || e.At.IsZero() {
+		return "", errors.New("invalid runtime event")
 	}
 	b, err := json.Marshal(e)
 	if err != nil || len(b) > maxEventBytes {
 		return "", errors.New("event exceeds 16 KiB")
 	}
+	digest := key(string(b))
+	e = c.cleanEvent(e)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.storageFailed {
 		return "", errors.New("durable storage unavailable")
 	}
-	owner := c.state.Owners[key(id, e.RunID)]
+	rk, k := key(id, e.RunID), key(id, e.RunID, e.ID)
+	owner, meta, old, found, err := c.lookup(rk, k)
+	if err != nil {
+		return "", err
+	}
 	if owner == "" {
 		return "", errors.New("run ownership is not negotiated")
 	}
+	c.touch(rk)
+	if found {
+		if old.Digest != digest {
+			return "", errors.New("event ID was reused with different content")
+		}
+		c.broadcast(e, source, "durable_duplicate")
+		return "acknowledged", nil
+	}
+	if meta.Finalized {
+		return "", errors.New("run is finalized; novel events rejected")
+	}
+	replay, err := c.window(k, digest)
+	if err != nil {
+		return "", err
+	}
+	c.broadcast(e, source, replay)
 	if owner == "node" && c.delivery == nil {
 		return "", errors.New("node delivery capability unavailable; ownership retained")
 	}
 	if owner != "node" || !c.delivery.Accepts(e) {
 		return "filtered", nil
 	}
-	k := key(id, e.RunID, e.ID)
-	digest := key(string(b))
-	if old, ok := c.state.Records[k]; ok {
-		if old.Digest != digest {
-			return "", errors.New("event ID was reused with different content")
-		}
-		return "acknowledged", nil
-	}
-	pending := 0
-	for _, r := range c.state.Records {
-		if r.Event != nil {
-			pending++
+	return c.enqueue(k, deliveryRecord{Digest: digest, Event: &e})
+}
+func (c *Core) enqueue(k string, r deliveryRecord) (string, error) {
+	count, pending := 0, 0
+	for _, v := range c.state.Records {
+		if v.Host == r.Host {
+			count++
+			if v.Event != nil {
+				pending++
+			}
 		}
 	}
-	if pending >= c.cfg.Limits.Pending || len(c.state.Records) >= c.cfg.Limits.Records {
-		return "", errors.New("durable event capacity exceeded")
+	recordLimit, pendingLimit := c.cfg.Limits.Records, c.cfg.Limits.Pending
+	if r.Host {
+		recordLimit, pendingLimit = 2048, 256
 	}
-	var copied events.Event
-	_ = json.Unmarshal(b, &copied)
+	if count >= recordLimit || pending >= pendingLimit {
+		return "", errors.New("durable event capacity exceeded; archive completed evidence")
+	}
 	s := c.copyState()
-	s.Records[k] = deliveryRecord{Digest: digest, Event: &copied}
-	if err = c.save(s); err != nil {
-		return "", err
+	s.Records[k] = r
+	if e := c.save(s); e != nil {
+		return "", e
 	}
 	select {
 	case c.wake <- struct{}{}:
@@ -246,7 +314,27 @@ func (c *Core) deliverPending(ctx context.Context) {
 		}
 	}
 	c.mu.Unlock()
+	runtimeKeys, hostKeys := []string{}, []string{}
 	for k, r := range pending {
+		if r.Host {
+			hostKeys = append(hostKeys, k)
+		} else {
+			runtimeKeys = append(runtimeKeys, k)
+		}
+	}
+	sort.Strings(runtimeKeys)
+	sort.Strings(hostKeys)
+	order := []string{}
+	for i := 0; i < len(runtimeKeys) || i < len(hostKeys); i++ {
+		if i < len(runtimeKeys) {
+			order = append(order, runtimeKeys[i])
+		}
+		if i < len(hostKeys) {
+			order = append(order, hostKeys[i])
+		}
+	}
+	for _, k := range order {
+		r := pending[k]
 		if ctx.Err() != nil {
 			return
 		}
