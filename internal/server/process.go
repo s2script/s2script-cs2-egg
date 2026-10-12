@@ -170,7 +170,7 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 			return fail("debugger_unavailable", errors.New("GDB_DEBUG_PORT requires gdbserver; select the debug image"))
 		}
 	}
-	versions, e := o.prepare(ctx, cfg, emit)
+	versions, e := o.prepare(context.WithValue(ctx, preparationRunKey{}, runID), cfg, emit)
 	if e != nil {
 		return fail("preparation_failed", e)
 	}

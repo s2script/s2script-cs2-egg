@@ -25,6 +25,13 @@ type GameProvider interface {
 	Prepare(context.Context, config.Server) (handled bool, err error)
 }
 type Options struct{ GameProvider GameProvider }
+type preparationRunKey struct{}
+
+// PreparationRunID identifies the managed runtime; offline preparations use a separate run.
+func PreparationRunID(ctx context.Context) string {
+	id, _ := ctx.Value(preparationRunKey{}).(string)
+	return id
+}
 
 func withProvider(standalone func(context.Context, config.Server) (string, error), provider GameProvider) func(context.Context, config.Server) (string, error) {
 	return func(ctx context.Context, cfg config.Server) (string, error) {
@@ -61,6 +68,7 @@ func Prepare(ctx context.Context, cfg config.Server, options Options) error {
 		return e
 	}
 	defer release()
+	ctx = context.WithValue(ctx, preparationRunKey{}, randomID())
 	_, e = prepareRuntimeOptions(ctx, cfg, func(kind, reason string, d map[string]string) {
 		if kind == "server.warning" {
 			fmt.Fprintln(os.Stderr, redactFor(cfg)("warning: "+reason+" "+d["message"]))

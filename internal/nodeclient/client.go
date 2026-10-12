@@ -8,7 +8,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/server"
@@ -79,9 +78,10 @@ func (c *Client) call(ctx context.Context, cap, kind string, in, out any) error 
 
 	attempts := 1
 	// These operations have stable run/event IDs or replace a snapshot. Retry
-	// ambiguous transport failure once; mutating module actions are never retried.
+	// ambiguous transport failure once. Shared reserve/commit use durable IDs;
+	// other mutating module actions are never retried.
 	switch kind {
-	case "run.claim", "event", "status", "status.report":
+	case "run.claim", "event", "status", "status.report", protocol.CapPrepare:
 		attempts = 2
 	}
 	var last error
@@ -213,14 +213,3 @@ func Optional(ctx context.Context, path string, fallback events.Sink) (events.Si
 // ServerID is authoritative only for this accepted, configured socket. The CLI
 // uses it for the active run without rewriting the saved standalone identity.
 func (c *Client) ServerID() string { c.mu.Lock(); defer c.mu.Unlock(); return c.identity.ServerID }
-
-// Prepare reserves the GameProvider integration point for Task9. This core has
-// no shared materializer and never advertises game.prepare itself. An installed
-// incompatible preparation module must fail closed, never use standalone Steam
-// on a potentially shared tree.
-func (c *Client) Prepare(ctx context.Context, cfg config.Server) (bool, error) {
-	if !c.Has(protocol.CapPrepare) {
-		return false, nil
-	}
-	return true, errors.New("shared preparation capability requires a compatible local materializer")
-}

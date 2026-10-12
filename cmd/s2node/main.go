@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -20,21 +21,39 @@ import (
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/node"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
+	"github.com/s2script/s2script-cs2-egg/internal/shared"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 func run(args []string, out, errs io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(errs, "usage: s2node run|config-check|status|doctor --config PATH | install --directory PATH")
+		fmt.Fprintln(errs, "usage: s2node run|config-check|status|doctor|shared-build|shared-prune|shared-attach|helper-run --config PATH | install --directory PATH")
 		return 2
 	}
 	command := args[0]
 	flags := flag.NewFlagSet("s2node", flag.ContinueOnError)
 	flags.SetOutput(errs)
 	path := flags.String("config", "/etc/s2node/node.json", "node configuration")
+	serverID := flags.String("server", "", "registered server ID for shared-attach")
+	generation := flags.String("generation", "", "published generation ID")
+	mode := flags.String("mode", "symlink", "attachment mode: symlink/copy/hardlink")
 	directory := flags.String("directory", "", "install staging directory")
 	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 {
 		return 2
+	}
+	if command == "helper-run" {
+		cfg, e := shared.LoadHelperConfig(*path)
+		if e != nil {
+			fmt.Fprintln(errs, "helper configuration:", e)
+			return 1
+		}
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		if e = shared.RunHelper(ctx, cfg); e != nil {
+			fmt.Fprintln(errs, "helper stopped:", e)
+			return 1
+		}
+		return 0
 	}
 	if command == "install" {
 		if *directory == "" {
@@ -49,7 +68,7 @@ func run(args []string, out, errs io.Writer) int {
 		return 0
 	}
 	switch command {
-	case "run", "config-check", "status", "doctor":
+	case "run", "config-check", "status", "doctor", "shared-build", "shared-prune", "shared-attach":
 	default:
 		fmt.Fprintln(errs, "unknown command")
 		return 2
@@ -58,6 +77,45 @@ func run(args []string, out, errs io.Writer) int {
 	if e != nil {
 		fmt.Fprintln(errs, "node configuration error:", e)
 		return 1
+	}
+	if command == "shared-build" || command == "shared-prune" || command == "shared-attach" {
+		if !cfg.Shared.Enabled {
+			fmt.Fprintln(errs, "shared module is not enabled")
+			return 1
+		}
+		store, e := shared.New(sharedOptions(cfg))
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		var result any
+		switch command {
+		case "shared-build":
+			result, e = store.Build(ctx)
+		case "shared-prune":
+			result, e = store.Prune(ctx)
+		case "shared-attach":
+			var srv node.Server
+			for _, v := range cfg.Servers {
+				if v.ID == *serverID {
+					srv = node.Server{ID: v.ID, Volume: v.Volume}
+				}
+			}
+			if srv.ID == "" {
+				fmt.Fprintln(errs, "unknown registered server")
+				return 1
+			}
+			e = store.Attach(ctx, srv, *generation, *mode)
+			result = "attached while stopped; container mount readiness is checked on next startup"
+		}
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		json.NewEncoder(out).Encode(result)
+		return 0
 	}
 	if command == "status" {
 		ctx, cancel := context.WithTimeout(context.Background(), protocol.Timeout)
@@ -118,6 +176,17 @@ func run(args []string, out, errs io.Writer) int {
 		fmt.Fprintln(out, "operator must provision systemd supplementary groups and ReadWritePaths for egg directories; doctor does not change permissions or acquire game locks")
 		return 0
 	case "run":
+		if cfg.Shared.Enabled {
+			store, e := shared.New(sharedOptions(cfg))
+			if e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+			if e = core.AddModule(&shared.Module{Store: store}, []string{protocol.CapPrepare}); e != nil {
+				fmt.Fprintln(errs, e)
+				return 1
+			}
+		}
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 		if e = core.Run(ctx); e != nil {
@@ -163,5 +232,24 @@ func install(dir string) error {
 	if closeErr := unit.Close(); e == nil {
 		e = closeErr
 	}
-	return e
+	if e != nil {
+		return e
+	}
+	helper, e := os.OpenFile(filepath.Join(abs, "s2node-helper@.service"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if e != nil {
+		return e
+	}
+	_, e = helper.Write(deploy.HelperUnit)
+	return errors.Join(e, helper.Close())
+}
+
+func sharedOptions(c config.Node) shared.Options {
+	o := shared.Options{Root: c.Shared.Root, SteamCMD: c.Shared.SteamCMD, ReserveBytes: c.Shared.ReserveBytes, Helpers: map[string]shared.HelperEndpoint{}}
+	for _, s := range c.Servers {
+		o.Registered = append(o.Registered, node.Server{ID: s.ID, Volume: s.Volume})
+		if s.HelperSocket != "" {
+			o.Helpers[s.ID] = shared.HelperEndpoint{Socket: s.HelperSocket, UID: s.PeerUID, GID: s.AccessGID}
+		}
+	}
+	return o
 }

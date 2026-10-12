@@ -20,18 +20,26 @@ type Allocation struct {
 	Port int    `json:"port"`
 }
 type NodeServer struct {
-	ID         string     `json:"id"`
-	Volume     string     `json:"volume"`
-	PeerUID    uint32     `json:"peer_uid"`
-	AccessGID  int        `json:"access_gid"`
-	Allocation Allocation `json:"allocation"`
+	HelperSocket string     `json:"helper_socket,omitempty"`
+	ID           string     `json:"id"`
+	Volume       string     `json:"volume"`
+	PeerUID      uint32     `json:"peer_uid"`
+	AccessGID    int        `json:"access_gid"`
+	Allocation   Allocation `json:"allocation"`
 }
 type NodeLimits struct {
 	Pending int `json:"pending"`
 	Records int `json:"records"`
 	Runs    int `json:"runs"`
 }
+type SharedNode struct {
+	Enabled      bool   `json:"enabled"`
+	Root         string `json:"root"`
+	SteamCMD     string `json:"steamcmd"`
+	ReserveBytes uint64 `json:"reserve_bytes"`
+}
 type Node struct {
+	Shared        SharedNode   `json:"shared"`
 	SchemaVersion int          `json:"schema_version"`
 	ID            string       `json:"id"`
 	StateDir      string       `json:"state_dir"`
@@ -93,11 +101,35 @@ func (n *Node) Validate() error {
 	if n.Limits.Pending < 1 || n.Limits.Pending > 1024 || n.Limits.Records < n.Limits.Pending || n.Limits.Records > 8192 || n.Limits.Runs < 1 || n.Limits.Runs > 4096 {
 		return errors.New("invalid node delivery limits")
 	}
+	if n.Shared.Enabled {
+		if n.Shared.Root == "" {
+			n.Shared.Root = "/srv/s2node/shared"
+		}
+		if !cleanAbsolute(n.Shared.Root) || !cleanAbsolute(n.Shared.SteamCMD) || overlaps(n.Shared.Root, n.StateDir) || overlaps(n.Shared.Root, filepath.Dir(n.AdminSocket)) {
+			return errors.New("shared root/SteamCMD must be absolute and separate from node private paths")
+		}
+		if n.Shared.ReserveBytes == 0 {
+			n.Shared.ReserveBytes = 64 << 30
+		}
+	}
 	ids := map[string]bool{}
 	allocations := map[string]bool{}
 	for i, s := range n.Servers {
 		if !nodeID.MatchString(s.ID) || ids[s.ID] || !cleanAbsolute(s.Volume) || s.AccessGID < 0 || len(filepath.Join(s.Volume, "egg/s2node.sock")) > 107 || net.ParseIP(s.Allocation.IP) == nil || s.Allocation.Port < 1 || s.Allocation.Port > 65535 {
 			return errors.New("invalid or duplicate registered server")
+		}
+		if n.Shared.Enabled && overlaps(s.Volume, n.Shared.Root) {
+			return errors.New("shared store overlaps private volume")
+		}
+		if s.HelperSocket != "" {
+			if !cleanAbsolute(s.HelperSocket) || len(s.HelperSocket) > 100 || overlaps(s.HelperSocket, s.Volume) || n.Shared.Enabled && overlaps(s.HelperSocket, n.Shared.Root) {
+				return errors.New("helper socket must be a host-only absolute path outside volumes/store")
+			}
+			for _, other := range n.Servers {
+				if overlaps(s.HelperSocket, other.Volume) {
+					return errors.New("helper socket overlaps a registered volume")
+				}
+			}
 		}
 		ids[s.ID] = true
 		a := net.JoinHostPort(s.Allocation.IP, strconv.Itoa(s.Allocation.Port))

@@ -53,3 +53,21 @@ func TestInstallStagesWithoutServices(t *testing.T) {
 		t.Fatal("install overclaimed host activation")
 	}
 }
+
+func TestInstallDoesNotOverwriteHelperTemplateSymlink(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "keep")
+	if e := os.WriteFile(outside, []byte("keep"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.Symlink(outside, filepath.Join(dir, "s2node-helper@.service")); e != nil {
+		t.Fatal(e)
+	}
+	if e := install(dir); e == nil {
+		t.Fatal("installation followed preexisting helper template link")
+	}
+	b, _ := os.ReadFile(outside)
+	if string(b) != "keep" {
+		t.Fatal("installation overwrote external file")
+	}
+}

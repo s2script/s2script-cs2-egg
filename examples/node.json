@@ -9,15 +9,33 @@
       "volume": "/var/lib/pterodactyl/volumes/replace-with-panel-server-uuid",
       "peer_uid": 1000,
       "access_gid": 2000,
-      "allocation": { "ip": "0.0.0.0", "port": 27015 }
+      "allocation": {
+        "ip": "0.0.0.0",
+        "port": 27015
+      }
     }
   ],
-  "limits": { "pending": 1024, "records": 8192, "runs": 4096 },
+  "limits": {
+    "pending": 1024,
+    "records": 8192,
+    "runs": 4096
+  },
   "webhook": {
     "url": "",
-    "events": ["server.up", "server.down", "server.crash", "server.start_failed"],
+    "events": [
+      "server.up",
+      "server.down",
+      "server.crash",
+      "server.start_failed"
+    ],
     "queue_capacity": 64,
     "max_retries": 2,
     "timeout_seconds": 10
+  },
+  "shared": {
+    "enabled": false,
+    "root": "/srv/s2node/shared",
+    "steamcmd": "/opt/s2node-steamcmd/steamcmd.sh",
+    "reserve_bytes": 68719476736
   }
 }

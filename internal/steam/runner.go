@@ -4,6 +4,7 @@ package steam
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -116,6 +117,21 @@ func InstalledBuild(root string) (string, error) {
 		return "", errors.New("installed app root is unavailable")
 	}
 	defer dir.Close()
+	if f, e := dir.OpenFile(".s2shared.json", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0); e == nil {
+		defer f.Close()
+		var state struct {
+			Generation struct {
+				BuildID string `json:"build_id"`
+			} `json:"generation"`
+		}
+		info, e := f.Stat()
+		if e != nil || !info.Mode().IsRegular() || json.NewDecoder(io.LimitReader(f, 64<<20)).Decode(&state) != nil || !regexp.MustCompile(`^[1-9][0-9]*$`).MatchString(state.Generation.BuildID) {
+			return "", errors.New("invalid shared installed build")
+		}
+		return state.Generation.BuildID, nil
+	} else if !errors.Is(e, os.ErrNotExist) {
+		return "", e
+	}
 	f, err := dir.OpenFile("steamapps/appmanifest_730.acf", os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return "", errors.New("installed app 730 manifest is missing")

@@ -53,10 +53,16 @@ type Receipt struct {
 // PrepareRequest reserves a generation only. No path or claimed server selector
 // is accepted. Materialization belongs to the caller-held preparation adapter.
 type PrepareRequest struct {
-	AppID    int  `json:"app_id"`
-	Validate bool `json:"validate"`
+	Operation   string `json:"operation,omitempty"`
+	RunID       string `json:"run_id,omitempty"`
+	RequestID   string `json:"request_id,omitempty"`
+	Reservation string `json:"reservation,omitempty"`
+	AppID       int    `json:"app_id"`
+	Validate    bool   `json:"validate"`
 }
 type Preparation struct {
+	BuildID     string `json:"build_id,omitempty"`
+	Digest      string `json:"digest,omitempty"`
 	Reservation string `json:"reservation"`
 	Generation  string `json:"generation"`
 }

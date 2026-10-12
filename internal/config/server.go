@@ -24,12 +24,18 @@ type Server struct {
 	SchemaVersion int          `json:"schema_version"`
 	Root          string       `json:"-"`
 	Identity      string       `json:"identity"`
+	Shared        SharedClient `json:"shared"`
 	Steam         Steam        `json:"steam"`
 	Frameworks    Frameworks   `json:"frameworks"`
 	Plugins       PluginPolicy `json:"plugins"`
 	Launch        Launch       `json:"launch"`
 	Readiness     Readiness    `json:"readiness"`
 	Webhook       Webhook      `json:"webhook"`
+}
+type SharedClient struct {
+	Mount     string   `json:"mount"`
+	Mode      string   `json:"mode"`
+	Overrides []string `json:"overrides"`
 }
 type Steam struct {
 	AppID          int    `json:"appid"`
@@ -129,6 +135,7 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 	}
 	s := Server{
 		SchemaVersion: 1, Root: abs,
+		Shared:     SharedClient{Mount: "/mnt/s2node", Mode: "symlink"},
 		Steam:      Steam{AppID: 730, Update: true},
 		Frameworks: Frameworks{S2ScriptUpdate: true, MetamodUpdate: true, Channel: "stable", S2ScriptVersion: "latest", MetamodVersion: "latest"},
 		Plugins:    PluginPolicy{File: "s2script-plugins.json", Bundled: map[string]bool{}, Overrides: map[string]bool{}},
@@ -171,6 +178,14 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fail(errors.New("egg/server.json: cannot read configuration"))
+	}
+	if !filepath.IsAbs(s.Shared.Mount) || filepath.Clean(s.Shared.Mount) != s.Shared.Mount || s.Shared.Mount == "/" || (s.Shared.Mode != "symlink" && s.Shared.Mode != "copy" && s.Shared.Mode != "hardlink") {
+		return fail(errors.New("shared mount must be an absolute clean path and mode symlink, copy or hardlink; hardlinks must be installed by host helper"))
+	}
+	for _, p := range s.Shared.Overrides {
+		if p == "" || p == "." || filepath.IsAbs(p) || filepath.Clean(p) != p || strings.HasPrefix(p, "../") {
+			return fail(errors.New("shared overrides must be relative file/directory paths"))
+		}
 	}
 	if lookup == nil {
 		lookup = os.LookupEnv

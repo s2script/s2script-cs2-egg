@@ -7,41 +7,18 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
+	"github.com/s2script/s2script-cs2-egg/internal/nodetypes"
 	"github.com/s2script/s2script-cs2-egg/internal/protocol"
 	"github.com/s2script/s2script-cs2-egg/internal/server"
 )
 
-type Server struct {
-	ID         string            `json:"id"`
-	Volume     string            `json:"volume"`
-	SocketPath string            `json:"socket_path"`
-	Allocation config.Allocation `json:"allocation"`
-}
-type Health struct {
-	Status      string `json:"status"`
-	Explanation string `json:"explanation,omitempty"`
-}
-type Module interface {
-	Name() string
-	Start(context.Context, Host) error
-	Health() Health
-	Close(context.Context) error
-}
-type Host interface {
-	Servers() []Server
-	Publish(context.Context, events.Event) error
-	Status(string) server.Status
-	Dispatch(context.Context, string, string, any) (any, error)
-}
+type Server = nodetypes.Server
+type Health = nodetypes.Health
+type Module = nodetypes.Module
+type Host = nodetypes.Host
+type Actions = nodetypes.Actions
 
-// Action handlers receive the configured immutable server, never client paths.
-// Modules are trusted in-process code, not a process isolation/security sandbox.
-type Actions interface {
-	Capabilities() []string
-	Handle(context.Context, Server, string, protocol.Message) (any, error)
-}
 type moduleEntry struct {
 	module Module
 	grants map[string]bool

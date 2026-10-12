@@ -6,3 +6,6 @@ import _ "embed"
 
 //go:embed s2node.service
 var Unit []byte
+
+//go:embed s2node-helper@.service
+var HelperUnit []byte

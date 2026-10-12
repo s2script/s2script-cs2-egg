@@ -15,11 +15,14 @@ import (
 	"time"
 
 	"github.com/s2script/s2script-cs2-egg/internal/alerts"
+	"github.com/s2script/s2script-cs2-egg/internal/artifact"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
 	"github.com/s2script/s2script-cs2-egg/internal/events"
 	"github.com/s2script/s2script-cs2-egg/internal/nodeclient"
 	"github.com/s2script/s2script-cs2-egg/internal/plugins"
+	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
 	runtime "github.com/s2script/s2script-cs2-egg/internal/server"
+	"github.com/s2script/s2script-cs2-egg/internal/shared"
 )
 
 func main() { os.Exit(run(os.Args[1:], os.LookupEnv, os.Stdout, os.Stderr)) }
@@ -42,7 +45,7 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 			}
 			return runtime.ReconcileLocked(ctx, cfg, req, errs)
 		})
-	case "run", "prepare", "status":
+	case "run", "prepare", "status", "shared-standalone":
 		command = args[0]
 		args = args[1:]
 	case "config":
@@ -108,6 +111,29 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 			fmt.Fprintln(errs, "server error:", e)
 		}
 		return code
+	case "shared-standalone":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		release, e := runtimelease.Acquire(server.Root)
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		defer release()
+		unlock, e := artifact.Acquire(server.Root)
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		defer unlock()
+		if e = artifact.Recover(server.Root); e == nil {
+			e = shared.StandaloneLocked(ctx, server.Root)
+		}
+		if e != nil {
+			fmt.Fprintln(errs, e)
+			return 1
+		}
+		fmt.Fprintln(out, "distinct writable standalone install ready; node references remain retained until stopped administrative reconciliation")
 	case "prepare":
 		// Keep the command alive to cancel and reap SteamCMD before preparation
 		// releases its runtime/artifact locks.
