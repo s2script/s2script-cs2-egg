@@ -4,6 +4,7 @@ package scheduler
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -125,60 +126,62 @@ func TestDispatchRechecksBlockingBoundaries(t *testing.T) {
 	for _, boundary := range []string{"state", "warning", "selection"} {
 		for _, change := range []string{"operator_stop", "offline", "new_run", "occupied", "unknown", "stale", "elapsed"} {
 			t.Run(boundary+"/"+change, func(t *testing.T) {
-				e, w, s, n := jobFixture(t)
-				defer e.Close()
-				power := &boundaryPower{fakePower: w}
-				e.o.Power = power
-				mutate := func() {
-					switch change {
-					case "operator_stop":
-						s.OperatorVeto = true
-						s.State = "stopped"
-						s.IntendedStopReason = "console_stop"
-						w.state = "offline"
-					case "offline":
-						w.state = "offline"
-					case "new_run":
-						s.RunID = "replacement"
-					case "occupied":
-						s.Players.Count = 2
-					case "unknown":
-						s.Players.Known = false
-					case "stale":
-						s.SampleAt = n.Add(-time.Hour)
-					case "elapsed":
-						time.Sleep(150 * time.Millisecond)
+				synctest.Test(t, func(t *testing.T) {
+					e, w, s, n := jobFixture(t)
+					defer e.Close()
+					power := &boundaryPower{fakePower: w}
+					e.o.Power = power
+					mutate := func() {
+						switch change {
+						case "operator_stop":
+							s.OperatorVeto = true
+							s.State = "stopped"
+							s.IntendedStopReason = "console_stop"
+							w.state = "offline"
+						case "offline":
+							w.state = "offline"
+						case "new_run":
+							s.RunID = "replacement"
+						case "occupied":
+							s.Players.Count = 2
+						case "unknown":
+							s.Players.Known = false
+						case "stale":
+							s.SampleAt = n.Add(-time.Hour)
+						case "elapsed":
+							time.Sleep(150 * time.Millisecond)
+						}
 					}
-				}
-				once := false
-				hook := func() {
+					once := false
+					hook := func() {
+						if !once {
+							once = true
+							mutate()
+						}
+					}
+					switch boundary {
+					case "state":
+						power.stateHook = hook
+					case "warning":
+						power.warningHook = hook
+					case "selection":
+						e.o.Select = func(context.Context, string, string) error { hook(); return nil }
+					}
+					p := Policy{Mode: "when_empty", MaximumDelay: time.Hour, WarningOffsets: []time.Duration{0}, Freshness: 100 * time.Millisecond}
+					j, err := e.Schedule(context.Background(), "srv", Target{Generation: "0123456789abcdef0123456789abcdef", Build: "200"}, "", p, *s, n)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err = e.Step(context.Background(), j.ID, n); err != nil {
+						t.Fatal(err)
+					}
 					if !once {
-						once = true
-						mutate()
+						t.Fatal("boundary not exercised")
 					}
-				}
-				switch boundary {
-				case "state":
-					power.stateHook = hook
-				case "warning":
-					power.warningHook = hook
-				case "selection":
-					e.o.Select = func(context.Context, string, string) error { hook(); return nil }
-				}
-				p := Policy{Mode: "when_empty", MaximumDelay: time.Hour, WarningOffsets: []time.Duration{0}, Freshness: 100 * time.Millisecond}
-				j, err := e.Schedule(context.Background(), "srv", Target{Generation: "0123456789abcdef0123456789abcdef", Build: "200"}, "", p, *s, n)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err = e.Step(context.Background(), j.ID, n); err != nil {
-					t.Fatal(err)
-				}
-				if !once {
-					t.Fatal("boundary not exercised")
-				}
-				if w.restarts != 0 {
-					t.Fatal("dispatched using pre-call evidence", e.Jobs())
-				}
+					if w.restarts != 0 {
+						t.Fatal("dispatched using pre-call evidence", e.Jobs())
+					}
+				})
 			})
 		}
 	}
