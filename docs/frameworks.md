@@ -1,6 +1,6 @@
 # Framework preparation
 
-The `internal/steam` and `internal/framework` libraries prepare the CS2 stack. CLI installation/startup wiring and live native-loading acceptance are later work. `s2egg run` is not available in this milestone. Tests use a fake SteamCMD executable and TLS fixture servers; no native game/framework binary is executed on the development host.
+The `internal/steam` and `internal/framework` libraries prepare the CS2 stack. CLI preparation/startup and stopped reconciliation are now wired; see [runtime contracts](runtime.md). Live native-loading acceptance, the runtime image and webhook delivery remain pending. Tests use a fake SteamCMD executable and TLS fixture servers; no native game/framework binary is executed on the development host.
 
 SteamCMD receives an argument vector with `+force_install_dir ROOT +login anonymous +app_update 730 [validate] +quit`. Shell punctuation and spaces in ROOT stay in one argument. Update returns the installed app-730 manifest's build ID. LatestBuild reads only the public branch reported by `+app_info_print 730`. Output is bounded; cancellation kills the subprocess group, including wrapper descendants. The caller keeps game consumers stopped and holds the artifact lock during preparation.
 

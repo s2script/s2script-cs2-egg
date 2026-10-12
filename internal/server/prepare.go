@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+package server
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/s2script/s2script-cs2-egg/internal/artifact"
+	"github.com/s2script/s2script-cs2-egg/internal/config"
+	"github.com/s2script/s2script-cs2-egg/internal/framework"
+	"github.com/s2script/s2script-cs2-egg/internal/plugins"
+	"github.com/s2script/s2script-cs2-egg/internal/runtimelease"
+)
+
+type prepOptions struct {
+	retained func(context.Context, config.Server, map[string]string) (framework.Selection, error)
+	steam    func(context.Context, config.Server) (string, error)
+	resolve  func(context.Context, config.Server, map[string]string) (framework.Selection, error)
+	native   func(context.Context, string, framework.Selection) (framework.Prepared, error)
+	plugins  func(context.Context, config.Server, plugins.Policy, []plugins.Installed, framework.Selection, []framework.BundledArtifact) (plugins.Prepared, error)
+}
+
+func defaultPreparation() prepOptions {
+	return prepOptions{steam: func(ctx context.Context, c config.Server) (string, error) { return prepareSteam(ctx, c, SteamSeed) }, resolve: framework.Resolve, retained: framework.Retained, native: framework.Prepare, plugins: plugins.Prepare}
+}
+
+// Prepare takes the runtime lease before artifact recovery and holds it through
+// the complete stopped-server update. Run retains that lease through game exit.
+func Prepare(ctx context.Context, cfg config.Server) error {
+	release, e := runtimelease.Acquire(cfg.Root)
+	if e != nil {
+		return e
+	}
+	defer release()
+	_, e = prepareRuntime(ctx, cfg, func(kind, reason string, d map[string]string) {
+		if kind == "server.warning" {
+			fmt.Fprintln(os.Stderr, redactFor(cfg)("warning: "+reason+" "+d["message"]))
+		}
+	})
+	return e
+}
+func prepareRuntime(ctx context.Context, cfg config.Server, emit emitFunc) (map[string]string, error) {
+	return prepareWith(ctx, cfg, emit, defaultPreparation())
+}
+
+// prepareWith requires the lifetime lease from its caller; only this function
+// takes the artifact lock. The CLI callback enters reconcileManaged directly.
+func prepareWith(ctx context.Context, cfg config.Server, emit emitFunc, o prepOptions) (map[string]string, error) {
+	release, e := artifact.Acquire(cfg.Root)
+	if e != nil {
+		return nil, e
+	}
+	defer release()
+	if e = artifact.Recover(cfg.Root); e != nil {
+		return nil, e
+	}
+	if e = ctx.Err(); e != nil {
+		return nil, e
+	}
+	build, e := o.steam(ctx, cfg)
+	if e != nil {
+		return nil, e
+	}
+	policy, e := plugins.ReadPolicy(cfg.Plugins.File)
+	if e != nil {
+		return nil, e
+	}
+	installed, e := plugins.Discover(cfg.Root)
+	if e != nil {
+		return nil, e
+	}
+	versions, e := reconcileManaged(ctx, cfg, policy, installed, emit, o)
+	if e != nil {
+		return nil, e
+	}
+	versions["steam_build"] = build
+	return versions, nil
+}
+
+// ReconcileLocked is a CLI/node integration boundary, NOT a locking entrypoint.
+// Caller MUST hold runtimelease then artifact lock and have completed Recover.
+// It does not run SteamCMD, release locks, or recursively call Prepare.
+func ReconcileLocked(ctx context.Context, cfg config.Server, req plugins.ReconcileRequest, log io.Writer) error {
+	if req.Root != cfg.Root || req.PolicyPath != cfg.Plugins.File {
+		return errors.New("reconciliation configuration does not match locked root")
+	}
+	if info, e := os.Stat(filepath.Join(cfg.Root, "game/csgo/gameinfo.gi")); e != nil || !info.Mode().IsRegular() {
+		return errors.New("installed game unavailable; run s2egg prepare before plugin reconciliation")
+	}
+	cfg.Plugins.Overrides = req.Overrides
+	emit := func(kind, reason string, d map[string]string) {
+		if kind == "server.warning" && log != nil {
+			fmt.Fprintln(log, redactFor(cfg)("warning: "+reason+" "+d["message"]))
+		}
+	}
+	_, e := reconcileManaged(ctx, cfg, req.Policy, req.Installed, emit, defaultPreparation())
+	if e != nil {
+		return errors.New(redactFor(cfg)(e.Error()))
+	}
+	return nil
+}
+func reconcileManaged(ctx context.Context, cfg config.Server, policy plugins.Policy, installed []plugins.Installed, emit emitFunc, o prepOptions) (map[string]string, error) {
+	pins := map[string]string{}
+	for name, p := range policy.Plugins {
+		if p.Source == "release" && plugins.ExactVersion(p.Version) {
+			pins[name] = p.Version
+		}
+	}
+	selection, e := o.resolve(ctx, cfg, pins)
+	if e != nil {
+		return nil, e
+	}
+	prepared, e := o.native(ctx, cfg.Root, selection)
+	if e != nil {
+		prepared.Cleanup()
+	}
+	var unavailable *framework.UnavailableError
+	if errors.As(e, &unavailable) && ctx.Err() == nil {
+		selection, e = o.retained(ctx, cfg, pins)
+		if e != nil {
+			return nil, e
+		}
+		emit("server.warning", "retained_framework", map[string]string{"message": "official download unavailable; retrying verified retained generation"})
+		prepared, e = o.native(ctx, cfg.Root, selection)
+		if e != nil {
+			prepared.Cleanup()
+		}
+	}
+	if e != nil {
+		return nil, e
+	}
+	defer prepared.Cleanup()
+	selection = prepared.Selection
+	if selection.Stale {
+		emit("server.warning", "retained_framework", map[string]string{"message": "using verified retained framework generation"})
+	}
+	for _, warning := range selection.Warnings {
+		emit("server.warning", "framework_warning", map[string]string{"message": warning})
+	}
+	p, e := o.plugins(ctx, cfg, policy, installed, selection, prepared.Bundled)
+	if e != nil {
+		return nil, e
+	}
+	defer p.Cleanup()
+	// Plugins.Changes already contains its inventory lock. The combined commit is
+	// the only point at which any native/plugin generation becomes live.
+	changes := append(append([]artifact.Change{}, prepared.Changes...), p.Changes...)
+	if e = artifact.Apply(ctx, cfg.Root, changes); e != nil {
+		return nil, e
+	}
+	for _, check := range p.Checks {
+		emit("server.plugin_check", check.Status, map[string]string{"name": check.Name, "available_version": check.AvailableVersion})
+	}
+	versions := map[string]string{"s2script": selection.S2Script.Version, "metamod": selection.Metamod.Version}
+	if selection.HUD != nil {
+		versions["hud"] = selection.HUD.Version
+	}
+	return versions, nil
+}

@@ -273,3 +273,16 @@ func TestReviewedOnlyConfigPrecedence(t *testing.T) {
 		t.Fatal("invalid reviewed-only accepted")
 	}
 }
+
+func TestCanonicalStartupFailureEvent(t *testing.T) {
+	root := t.TempDir()
+	if e := os.MkdirAll(filepath.Join(root, "egg"), 0700); e != nil {
+		t.Fatal(e)
+	}
+	for _, name := range []string{"server.start_failed", "startup.failure"} {
+		os.WriteFile(filepath.Join(root, "egg/server.json"), []byte(`{"webhook":{"events":["`+name+`"]}}`), 0600)
+		if _, e := config.LoadServer(root, func(k string) (string, bool) { return "1", k == "ALLOW_TOKENLESS" }); e != nil {
+			t.Fatalf("event %s: %v", name, e)
+		}
+	}
+}

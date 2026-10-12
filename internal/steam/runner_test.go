@@ -4,10 +4,15 @@ package steam
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -75,5 +80,79 @@ func TestSteamCancellationStopsDescendants(t *testing.T) {
 	time.Sleep(1100 * time.Millisecond)
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatal("SteamCMD descendant survived cancellation")
+	}
+}
+
+func TestInstalledBuildRejectsEscapingManifest(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "appmanifest_730.acf"), []byte(`"appid" "730" "buildid" "123"`), 0600)
+	os.Symlink(outside, filepath.Join(root, "steamapps"))
+	if _, e := InstalledBuild(root); e == nil {
+		t.Fatal("read manifest outside root")
+	}
+}
+
+func TestSteamCommandOwnsDescendantCleanup(t *testing.T) {
+	for _, cancelCommand := range []bool{false, true} {
+		t.Run(fmt.Sprint(cancelCommand), func(t *testing.T) {
+			root := t.TempDir()
+			pidFile := filepath.Join(root, "child")
+			script := `sh -c 'echo $$ > "` + pidFile + `"; exec sleep 30' >/dev/null 2>&1 &
+while [ ! -s "` + pidFile + `" ]; do sleep 0.01; done
+`
+			if cancelCommand {
+				script += "wait\n"
+			} else {
+				script += `echo '"public" { "buildid" "123" }'` + "\n"
+			}
+			sibling := exec.Command("sh", "-c", "sleep 0.05; exit 7")
+			if e := sibling.Start(); e != nil {
+				t.Fatal(e)
+			}
+			defer sibling.Process.Kill()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan error, 1)
+			executable := fakeSteam(t, script)
+			go func() { _, e := LatestBuild(ctx, executable); done <- e }()
+			childPID := 0
+			deadline := time.Now().Add(3 * time.Second)
+			for time.Now().Before(deadline) {
+				b, e := os.ReadFile(pidFile)
+				if e == nil {
+					childPID, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+					if childPID > 0 {
+						break
+					}
+				}
+				time.Sleep(time.Millisecond)
+			}
+			if childPID == 0 {
+				t.Fatal("Steam fixture descendant did not start")
+			}
+			defer syscall.Kill(childPID, syscall.SIGKILL)
+			if cancelCommand {
+				cancel()
+			}
+			select {
+			case e := <-done:
+				if cancelCommand && !errors.Is(e, context.Canceled) {
+					t.Fatalf("expected cancellation: %v", e)
+				}
+				if !cancelCommand && e != nil {
+					t.Fatal(e)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("Steam command did not finish")
+			}
+			if e := syscall.Kill(childPID, 0); !errors.Is(e, syscall.ESRCH) {
+				t.Fatalf("Steam descendant remains after command return: %v", e)
+			}
+			var exit *exec.ExitError
+			if !errors.As(sibling.Wait(), &exit) || exit.ExitCode() != 7 {
+				t.Fatal("Steam command reaped unrelated child")
+			}
+		})
 	}
 }

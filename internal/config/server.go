@@ -131,7 +131,7 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 		Plugins:    PluginPolicy{File: "s2script-plugins.json", Bundled: map[string]bool{}, Overrides: map[string]bool{}},
 		Launch:     Launch{IP: "0.0.0.0", Port: 27015, Map: "de_dust2", MaxPlayers: 32},
 		Readiness:  Readiness{TimeoutSeconds: 120, PollIntervalSeconds: 1},
-		Webhook:    Webhook{Events: []string{"server.up", "server.down", "server.crash", "startup.failure"}, TimeoutSeconds: 10},
+		Webhook:    Webhook{Events: []string{"server.up", "server.down", "server.crash", "server.start_failed"}, TimeoutSeconds: 10},
 	}
 	for _, p := range catalog.Bundled() {
 		s.Plugins.Bundled[p.Name] = p.DefaultEnabled
@@ -284,7 +284,7 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 			return fail(errors.New("DISCORD_WEBHOOK_URL must be an HTTPS Discord webhook URL"))
 		}
 	}
-	allowedEvents := map[string]bool{"server.up": true, "server.down": true, "server.crash": true, "startup.failure": true, "server.restart": true, "server.update": true, "backup": true, "guard": true}
+	allowedEvents := map[string]bool{"server.up": true, "server.down": true, "server.crash": true, "server.start_failed": true, "startup.failure": true, "server.restart": true, "server.update": true, "backup": true, "guard": true}
 	for _, event := range s.Webhook.Events {
 		if !allowedEvents[event] {
 			return fail(errors.New("webhook.events contains unsupported event"))
