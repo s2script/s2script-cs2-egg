@@ -72,15 +72,24 @@ shared storage, coordinated updates or host operations. Each module is opt-in;
 host credentials remain outside game containers. Communication uses private
 Unix sockets and explicit peer identities.
 
-Follow the **[step-by-step node setup guide](docs/node-setup.md)** for a first
-shared installation or a partially downloaded standalone server. It covers the
-host binary, account, SteamCMD, permissions, service, Pelican mount and checks.
-The recommended symlink path keeps each server's configs/plugins private.
+On an **Ubuntu/Debian amd64 Wings node** with `curl`, Python 3.10+ and healthy
+Wings/Docker, stop your test server and run:
 
-Shared files are opt-in and local to each node. Our `s2node install` command stages
-files; it is not an interactive provisioning wizard. Use the [node reference](docs/node.md),
-[shared-file reference](docs/shared-files.md) and [updates](docs/updates.md) for
-advanced setups after verifying one development server.
+```bash
+curl -fsSL https://raw.githubusercontent.com/s2script/s2script-cs2-egg/main/scripts/setup-node.py | sudo python3 -
+```
+
+The wizard discovers servers, asks for allocations/release, installs s2node and
+host SteamCMD, prepares permissions/configuration, and starts an optional
+background CS2 build. It shows a summary before applying changes and preserves
+existing settings with private backups. You finish by attaching the **read-only
+mount** in the panel, then start one server after the build succeeds.
+
+Follow the **[short node setup guide](docs/node-setup.md)** for prompts, the panel
+mount values and checks. Shared files are opt-in and local to each node; symlink
+mode shares VPKs while keeping configs/plugins private. A partial standalone
+download can switch without finishing first. For custom layouts, use the
+[manual setup](docs/node-setup-manual.md) and [node reference](docs/node.md).
 
 ## Documentation
 

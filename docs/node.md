@@ -1,7 +1,7 @@
 # Optional node core
 
 **Installing your first node? Start with [Node setup](node-setup.md).** It gives
-ordered terminal commands, expected results and the Pelican mount steps for the
+an interactive provisioning wizard, expected results and the Pelican mount steps for the
 recommended symlink mode. This page is the detailed configuration/API reference.
 
 The Linux x86-64 `s2node` daemon is optional. The ordinary Pterodactyl or Pelican egg starts without it. The core provides socket-bound identity, typed capability negotiation, runtime status reports, optional-module lifecycle, and durable webhook ownership. Shared generation preparation, update scheduling, verified artifact caching and workshop sharing are optional registered modules; see [cache and workshop](workshop.md) for source/trust policy and provisioning. The core advertises only capabilities provided by registered implementations. No Docker socket or Wings administrator credential enters the game container.
@@ -19,7 +19,7 @@ Review [deploy/s2node.service](../deploy/s2node.service). It runs as `s2node`, w
 Wings' recursive ownership repair can change the daemon-owned server sockets.
 For this mixed-UID setup, explicitly provision ownership and set
 `system.check_permissions_on_boot: false` on the sharing node; see the
-[walkthrough](node-setup.md#8-allow-the-read-only-mount-and-preserve-socket-ownership).
+[manual walkthrough](node-setup-manual.md#8-allow-the-read-only-mount-and-preserve-socket-ownership).
 Reinstalls and other recursive chown operations also need ownership review.
 
 Before enabling the reviewed unit, run as its service identity:
