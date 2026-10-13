@@ -1,6 +1,12 @@
 # Install and verify the standalone server
 
-Linux x86-64 is the supported platform. Use source builds until the selected release has passed [public availability verification](releases.md). The Dockerfile has shared `runtime` and `debug` targets; its default target is `runtime`. Local process/HTTP fixtures pass, but native CS2, SteamCMD initialization, Metamod/S2Script loading, panel import and HUD acceptance require the checklist in [testing.md](testing.md). Local Docker access was unavailable during implementation.
+Linux x86-64 is the supported platform. For a panel installation, use the
+[egg URL and published images](#pterodactyl-or-pelican). No Go toolchain or local
+image build is needed once the selected release has passed
+[public availability verification](releases.md). The first alpha publication is
+still pending; until then, use [source builds](#build-from-source) for development.
+Native CS2, SteamCMD initialization, Metamod/S2Script loading, panel import and
+HUD acceptance require the checklist in [testing.md](testing.md).
 
 ## Host preparation
 
@@ -24,6 +30,9 @@ services required for download/authentication. Obtain a GSLT from Valve's
 supply it privately as STEAM_ACC. Do not reuse example credentials.
 
 ## Build from source
+
+This is the development/custom-image path. Panel users can skip to
+[Pterodactyl or Pelican](#pterodactyl-or-pelican).
 
 Build on a Docker host with sufficient disk for CS2 and its persistent updates:
 
@@ -61,11 +70,57 @@ Use `docker stop --time 30 s2script-cs2` for direct Docker shutdown. Budget: gam
 
 ## Pterodactyl or Pelican
 
-1. Build the image on each assigned node or arrange your own registry distribution; do not configure the local tag on a node where it does not exist.
-2. Regenerate the import file for that image: `make egg IMAGE=your-image:tag`. Import [the generated PTDL_v2 egg](../pterodactyl/s2script-cs2-egg.json) in the panel's egg import UI. Menu names vary by panel/version.
-3. Assign the reachable game allocation. `SERVER_IP` and `SERVER_PORT` are panel-reserved allocation values and intentionally absent from editable egg variables. Select the locally built runtime image, provide GSLT and optional private webhook URL, and retain bundled plugin `default` controls unless overriding them.
-4. The installer records that first startup installs into the persistent root. It neither downloads a game in the installer nor reports the game ready. Start with adequate first-install time/disk/network allowance; preparation can take much longer than a warm game launch.
-5. Verify the readiness marker, `s2egg status`, client connection, native frameworks and plugin behavior. Panel stop is `quit`. Confirm there is one down event per ready run.
+1. Open the panel administration area, then **Eggs → Import → From URL** or
+   **Nests → Import Egg** (menu names depend on the panel/version). Paste:
+
+   ```text
+   https://raw.githubusercontent.com/s2script/s2script-cs2-egg/main/pterodactyl/s2script-cs2-egg.json
+   ```
+
+   This imports **S2Script CS2 (standalone)**. If your panel only supports file
+   uploads, download this JSON and upload it. The egg's `meta.update_url` uses
+   the same address for panels that support updating an egg from its URL.
+2. Create a server using the imported egg and select **S2Script prerelease**
+   during the alpha period. Wings pulls the selected image from GHCR:
+
+   | Panel choice | Image | Availability |
+   | --- | --- | --- |
+   | S2Script prerelease (default) | `ghcr.io/s2script/s2script-cs2-egg:prerelease` | After a successful release, including alphas |
+   | S2Script stable | `ghcr.io/s2script/s2script-cs2-egg:stable` | After the first successful stable release |
+
+   Confirm the selected release's **public-verification** job succeeded.
+   An imported egg alone does not publish its images. If Wings reports
+   `manifest unknown`, check that the channel has been published; access errors
+   require checking [GHCR visibility](releases.md#publish).
+3. Assign the reachable game allocation. `SERVER_IP` and `SERVER_PORT` come
+   from the panel allocation and are absent from editable egg variables.
+   Provide your GSLT as `STEAM_ACC`, optionally set a private webhook URL, and
+   retain bundled plugin `default` controls unless overriding them.
+4. The panel installer uses `ghcr.io/pterodactyl/installers:debian` and finishes
+   without downloading CS2. **Start the server** to install CS2, Metamod and
+   S2Script into the persistent root. Allow adequate first-install time, disk
+   and network access; preparation takes longer than a warm game launch.
+5. Verify `S2EGG_READY`, `s2egg status`, client connection, native frameworks
+   and plugin behavior. Panel stop is `quit`. Confirm there is one down event
+   per ready run.
+
+For an exact version, copy the `egg-s2script-cs2.json` asset link from a verified
+[release](https://github.com/s2script/s2script-cs2-egg/releases) into the same
+import UI. The link has the form
+`https://github.com/s2script/s2script-cs2-egg/releases/download/vVERSION/egg-s2script-cs2.json`.
+That egg references only the matching immutable `:vVERSION` image and has no
+moving update URL. GitHub's `releases/latest` download URL excludes prereleases,
+so use a specific release asset link for alphas.
+
+For a custom/local build, make the image available on each assigned node and
+generate a separate import file with Go 1.27.2:
+
+```sh
+go run ./cmd/egggen --image your-image:tag --output /tmp/s2script-custom-egg.json
+```
+
+Upload that file instead. `make egg` regenerates the checked-in channel egg;
+`make egg IMAGE=your-image:tag` deliberately replaces it with a custom-image egg.
 
 The image CMD directly runs `/usr/local/bin/s2egg run --root /home/container`; no `STARTUP` shell evaluation is needed. No Docker socket or Wings administrator credential is mounted into the game container. Panel import/start/stop remains unverified locally.
 

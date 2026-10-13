@@ -119,6 +119,35 @@ func TestEggUsesPanelAllocationVariables(t *testing.T) {
 	}
 }
 
+func TestExplicitImageRemainsPinnedWithoutChannelUpdates(t *testing.T) {
+	for _, image := range []string{"s2script-cs2-egg:dev", "ghcr.io/s2script/s2script-cs2-egg:v0.0.1-alpha.1"} {
+		t.Run(image, func(t *testing.T) {
+			b, err := panel.Generate(image)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var egg struct {
+				Meta struct {
+					UpdateURL string `json:"update_url"`
+				} `json:"meta"`
+				Images  map[string]string `json:"docker_images"`
+				Scripts struct {
+					Installation struct{ Container, Script, Entrypoint string }
+				} `json:"scripts"`
+			}
+			if err := json.Unmarshal(b, &egg); err != nil {
+				t.Fatal(err)
+			}
+			if len(egg.Images) != 1 || egg.Images["S2Script runtime"] != image || egg.Meta.UpdateURL != "" {
+				t.Fatalf("explicit image can drift to channel defaults: %+v", egg)
+			}
+			if egg.Scripts.Installation.Container != "ghcr.io/pterodactyl/installers:debian" {
+				t.Fatal("installer depends on runtime image availability")
+			}
+		})
+	}
+}
+
 func TestCatalogIdentitiesAndDocumentation(t *testing.T) {
 	want := map[string]bool{"basecommands": true, "basechat": true, "playercommands": true, "antiflood": true, "adminhelp": true, "basecomm": true, "basebans": true, "reservedslots": true, "basetriggers": true, "funcommands": true, "clientprefs": true, "adminmenu": true, "basevotes": true, "zones": true, "nominations": false, "rockthevote": false, "nextmap": false, "funvotes": false}
 	doc := string(panel.CatalogMarkdown())

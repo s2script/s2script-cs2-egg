@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 GO ?= go
-IMAGE ?= s2script-cs2-egg:dev
+IMAGE ?= ghcr.io/s2script/s2script-cs2-egg:prerelease
 
 .PHONY: build test vet egg egg-check clean
 

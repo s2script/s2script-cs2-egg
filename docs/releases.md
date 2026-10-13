@@ -1,6 +1,6 @@
 # Releases and corresponding source
 
-The intended first release is **v0.1.0-alpha.1**. This document describes the
+The intended first release is **v0.0.1-alpha.1**. This document describes the
 publication procedure; it does not claim that tag or images are already
 available. Check the actual [release listing](https://github.com/s2script/s2script-cs2-egg/releases)
 and its Release workflow, including **public-verification**. Native acceptance
@@ -14,8 +14,8 @@ modifications and untracked source files are rejected. Output must not already
 exist and must be outside the checkout.
 
 ```sh
-make release RELEASE_TAG=v0.1.0-alpha.1 OUT=/tmp/s2script-release-v0.1.0-alpha.1
-go run ./cmd/releasectl verify --output /tmp/s2script-release-v0.1.0-alpha.1
+make release RELEASE_TAG=v0.0.1-alpha.1 OUT=/tmp/s2script-release-v0.0.1-alpha.1
+go run ./cmd/releasectl verify --output /tmp/s2script-release-v0.0.1-alpha.1
 ```
 
 The command reads the exact committed Git tree, exports the corresponding
@@ -51,7 +51,10 @@ independent cryptographic publisher signature.
 2. Review source visibility. The public-distribution workflow refuses a private
    repository; it never changes repository or package visibility.
 3. Create a canonical tag at the reviewed merged commit. Publish a GitHub release
-   with a matching prerelease flag. Only `release:published` triggers publication;
+   with a matching prerelease flag. For example, `v0.0.1-alpha.1` requires
+   **Set as a pre-release**; `v1.0.0` requires that box unchecked. Write `v0.0.1`,
+   with no dot between `v` and the first number. The workflow validates both
+   fields before installing Go or running tests. Only `release:published` triggers publication;
    tag pushes, PRs and ordinary CI never publish.
 4. The read-only job tests and packages the exact tag. The serialized publisher
    regenerates the package, uploads without clobbering, checks every API digest
@@ -78,6 +81,28 @@ including stable releases. There is no `latest` alias. Existing aliases must
 have valid source/version/digest identity; equal-version conflicts fail.
 Release jobs are serialized across the repository. Runtime/debug aliases cannot
 switch atomically: select immutable tags or digests for coordinated deployments.
+
+The checked-in [panel egg](../pterodactyl/s2script-cs2-egg.json) offers the
+`prerelease` channel first and `stable` as an alternative, with a raw GitHub
+update URL. Its installer uses the standard Pterodactyl Debian installer image;
+CS2 installation runs on first server startup. Release asset eggs stay pinned
+to their immutable image and do not inherit the moving channel's update URL.
+The `stable` choice is usable only after a stable release has published it.
+
+### Recovering the first failed alpha
+
+The October 13, 2026 [release run](https://github.com/s2script/s2script-cs2-egg/actions/runs/38418225357)
+used `v.0.0.1-alpha.1` and had `prerelease: false`. Packaging rejected the extra
+dot; after fixing the tag, the incorrect prerelease flag would also block
+publication. The run never entered the publisher and the release had no assets
+when inspected.
+
+After merging the fix and passing CI, create **`v0.0.1-alpha.1` at that merged
+commit**, then publish its GitHub release with **Set as a pre-release** checked.
+This is a new tag; retain the failed tag as evidence. Rerunning the old action
+would still use its original tag, event metadata and source revision. Editing
+release notes does not trigger publication. Check the new release's publisher
+and anonymous verification jobs before using the panel image.
 
 Publication can be partially complete. The updater fails closed on absent,
 mismatched or incompatible assets. A failure never overwrites an asset or

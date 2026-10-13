@@ -12,8 +12,10 @@ CS2 server tooling for Linux amd64, Pterodactyl and Pelican, built around **Meta
 This is an initial alpha implementation. Automated fixtures and CI image checks
 cover the runtime and optional node services. Live CS2, panel, HUD and firewall
 acceptance remains unverified; see the [acceptance record](docs/acceptance.md).
-Use the source-build instructions until a release's public-verification job
-confirms its downloadable assets and images.
+Panel installation uses the egg URL below and published GHCR images. The image
+channel becomes usable after a release's **public-verification** job succeeds;
+the first alpha publication is still pending. [Source builds](docs/install.md#build-from-source)
+remain available for development.
 
 ## Features
 
@@ -38,20 +40,23 @@ allocation and a Steam game server login token (GSLT). The
 [installation guide](docs/install.md) covers panel import, permissions, disk
 planning, network ports and first-start verification.
 
-Build the runtime image and generate an egg that references it:
+1. In the panel's administration area, open **Eggs → Import → From URL**
+   (or **Nests → Import Egg**, depending on the panel) and paste:
 
-```sh
-git clone https://github.com/s2script/s2script-cs2-egg.git
-cd s2script-cs2-egg
-docker build --platform linux/amd64 --target runtime \
-  -f docker/Dockerfile -t s2script-cs2-egg:dev .
-make egg IMAGE=s2script-cs2-egg:dev
+```text
+https://raw.githubusercontent.com/s2script/s2script-cs2-egg/main/pterodactyl/s2script-cs2-egg.json
 ```
 
-`make egg` requires Go **1.27.2** and Make. Import
-[pterodactyl/s2script-cs2-egg.json](pterodactyl/s2script-cs2-egg.json) into your
-panel and select the image built on the assigned node. Supply the GSLT privately
-and start the server. First start downloads CS2 and the selected framework stack.
+2. Create a server using **S2Script CS2 (standalone)**. Select
+   **S2Script prerelease** (`ghcr.io/s2script/s2script-cs2-egg:prerelease`) during
+   the alpha period. The stable choice needs a published stable release.
+3. Assign the game allocation, supply the GSLT privately as `STEAM_ACC`, and
+   start the server. First start downloads CS2, Metamod and S2Script.
+
+No local image build or Go installation is needed for the published-image path.
+If your panel only accepts file uploads, download the JSON from the same link
+and upload it. See [installation](docs/install.md#pterodactyl-or-pelican) for
+version-pinned imports and image availability checks.
 
 Leave bundled plugin controls at `default` to inherit S2Script's enablement.
 Set a control to `0` or `1` to disable or enable it. Use the

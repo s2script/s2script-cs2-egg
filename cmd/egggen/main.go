@@ -16,7 +16,7 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 func run(args []string, out, errs io.Writer) int {
 	flags := flag.NewFlagSet("egggen", flag.ContinueOnError)
 	flags.SetOutput(errs)
-	image := flags.String("image", "s2script-cs2-egg:dev", "locally built container image reference")
+	image := flags.String("image", panel.DefaultImage, "container image reference; default offers published prerelease/stable channels")
 	output := flags.String("output", "pterodactyl/s2script-cs2-egg.json", "egg JSON path")
 	catalog := flags.String("catalog-output", "", "optional generated plugin documentation path")
 	check := flags.Bool("check", false, "verify generated files without writing")
