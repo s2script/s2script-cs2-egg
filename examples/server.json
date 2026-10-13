@@ -1,1 +1,0 @@
-{"schema_version":1,"steam":{"allow_tokenless":true},"frameworks":{"hud":false},"plugins":{"file":"s2script-plugins.json","bundled":{}},"launch":{"map":"de_dust2","max_players":32},"webhook":{"url":""}}

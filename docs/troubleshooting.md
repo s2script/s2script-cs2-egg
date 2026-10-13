@@ -1,74 +1,106 @@
 # Troubleshooting
 
-Start with `s2egg version`, `s2egg config check --root PATH` and
-`s2egg doctor --root PATH`. Supply the same environment as the server; diagnostics
-do not invent a GSLT. `config show` redacts known secrets but still contains
-deployment paths. Node diagnostics are `s2node doctor --config PATH --json`.
-They inspect local prerequisites, not gameplay or stopped-state proof.
+Symptom first. If you are not sure which side is wrong, start with `sudo cs2node doctor` on the node and the server's console in the panel.
 
-| Symptom | Check |
-| --- | --- |
-| First start is slow | SteamCMD/game download progress, free disk, writable HOME, outbound DNS/HTTPS/Steam access; framework preparation precedes game readiness |
-| Image cannot be pulled | Correct immutable tag, completed public-verification job and GHCR package visibility; otherwise build from source |
-| No `S2EGG_READY` or up event | Actual local A2S response, allocation, game exit/readiness timeout; a banner alone is insufficient |
-| Metamod/S2Script fails to load | Native pair compatibility and game build; inspect logs and `meta list`; see [frameworks](frameworks.md) |
-| Disabled plugin re-enables | Check explicit panel `0/1` overrides before manifest enablement; `default` inherits |
-| Plugin update refuses | Exact pin/runtime coupling, identity collisions, reviewed-only policy, unsafe/manual ownership or incomplete publisher evidence; do not delete locks/cache to bypass verification |
-| Registry unavailable | Only compatible verified retained artifacts can be used; a missing pinned package cannot be fabricated |
-| Node says unknown/lost contact | Private socket mount, peer UID/GID, module policy and runtime reports; unknown never means stopped |
-| Shared startup refuses fallback | Mount/generation identity or retained reference mismatch; use documented stopped standalone conversion, never run SteamCMD into a shared target |
-| Backup/restore is refused | Runtime lease, actual-UID helper authority, archive hash, preview identities, disk quota and retained recovery catalogs |
-| Duplicate/missing notifications | Event IDs, node ownership, configured filters, queue/retry/archive status; Discord transport cannot guarantee exactly once after ambiguous failure |
-| Project update will not activate | Managed launcher layout, root-owned policy, version/source identity, protocol/state/helper compatibility and previous failure journal |
-| Guard does not block | Opt-in block policy, exact external allocation, allowlists, helper health and nftables capability; log mode has no packet effect |
-| Debug image times out | Attach and continue the debugger within readiness budget; keep its port private |
+## The server
 
-## Panel startup and CS2-Egg-Go
+### It downloads CS2 even though the node manages the files
 
-The panel install script intentionally only prints a message. Like
-[CS2-Egg-Go's egg](https://github.com/K4ryuu/CS2-Egg-Go/blob/main/pterodactyl/kitsunelab-cs2-go-egg.json),
-the runtime downloads game files on first **Start**, into the persistent server
-volume. Reinstalling the egg is not needed to populate that script.
+The console says `Daemon-managed game files, SteamCMD skipped` when sharing works. If it does not:
 
-| Operation | S2Script CS2 | CS2-Egg-Go |
-| --- | --- | --- |
-| Panel installation | Import JSON by URL; first start downloads CS2 and frameworks | Import JSON by URL; first start performs downloads |
-| Game bind | `0.0.0.0` and allocated `SERVER_PORT`; optional explicit local bind | Default startup uses `+ip 0.0.0.0` and allocated port |
-| Download console | Launcher banner, preparation stages and redacted SteamCMD output | SteamCMD output is streamed to its logger |
-| Steam token | Requires `STEAM_ACC` unless `ALLOW_TOKENLESS=1` is explicit | Missing GSLT does not block launcher startup |
-| Native frameworks | Requires a verified compatible Metamod/S2Script installation; preparation errors stop launch | Framework installations are optional switches |
-| Startup command | Managed argument vector; extra arguments use `CUSTOM_PARAMS` | Expands the panel's `STARTUP` command |
-| Panel ready marker | `S2EGG_READY`, only after a successful local A2S game query | Matches `Source2Init OK` from game output |
+- Is the daemon running? `systemctl status cs2node`
+- Does the node see the container? `cs2node status` lists it, with its egg connection.
+- Is the image name in `modules.images`? A server on an image the node does not recognise is ignored by every module.
+- `KL-DMN-03` or `KL-DMN-04` in the console has the specific reason. See [error codes](reference/error-codes.md).
 
-This comparison is based on the upstream egg and
-[SteamCMD adapter](https://github.com/K4ryuu/CS2-Egg-Go/blob/main/internal/egg/steamcmd/steamcmd.go)
-inspected on 2026-10-13. Neither ready marker proves native plugin functionality.
+### The console shows a crash after I pressed Stop
 
-The initial `v0.0.1-alpha.1` image hid SteamCMD output and used `SERVER_IP` as
-the bind address. That could make downloads appear stalled, then reject the
-host allocation as unavailable inside a bridge-networked container. The source
-fixes documented here require a newer image release; updating the egg JSON
-alone does not update an already-created runtime container.
+It should not: the engine's noisy exit on shutdown is swallowed. If you see `KL-SRV-01` after a stop, the image is older than 2026-09-11. Stop and start the server so Wings pulls the current one.
 
-If the panel shows only its own **server marked as starting** message, then goes
-offline, that message does not establish that the launcher ran. With the updated
-image, expect **Starting S2Script CS2** followed by a stage or configuration
-error. If even that banner is absent, inspect Wings/container logs on the node
-for image-pull, container-create, permission, architecture or process-exit errors.
-Check the actual running image ID/version after pulling and recreating the
-container; a moving `:prerelease` label alone does not prove which build ran.
+### Map and player counts show `-` in `cs2node status`
 
-If a stage is visible, use its error and SteamCMD exit code to diagnose it.
-Provide `STEAM_ACC`, or deliberately enable `ALLOW_TOKENLESS=1` for tokenless
-testing. The game readiness timeout begins after preparation and process launch;
-it is not a limit on the initial CS2 download. Do not delete the server volume to
-retry a startup failure.
+The egg has not reported yet. Give it a few seconds after a boot. If it stays:
 
-Read [logs](logging.md), [cleanup/delivery evidence](cleanup.md),
-[update recovery](updates.md) and [backup recovery](backups.md) before deleting
-state. Use stable request IDs for retries and inspect uncertain outcomes.
+```bash
+cs2node status      # the egg column shows its build stamp, or "(old image)"
+cs2node doctor      # says outright when a container runs a pre-2026-09-11 egg
+```
 
-For an issue, include source/version, panel and OS versions, selected modules,
-expected/actual behavior and a minimal redacted reproducer. Exclude GSLTs,
-webhook URLs, Wings credentials, private player data and binary dumps. Follow
-[security reporting](../.github/SECURITY.md) for vulnerabilities.
+A container that never picked up a new image is the usual answer. Stop and start it.
+
+### A plugin stopped working after an update
+
+Check what changed: `egg/versions.txt` on the server records every framework version the egg installed. With the [addon cache](modules/addon-cache.md) you can put the fleet back:
+
+```bash
+sudo cs2node pin metamod 2.0.0-git1450
+```
+
+Servers move to that version, downgrade included, on their next restart.
+
+### The console is unreadable
+
+`ENABLE_FILTER=1` and add patterns to `egg/configs/console-filter.json`. Set `preview_mode` to `true` first so blocked lines still show at debug level, and you can see what you are about to lose.
+
+## The node
+
+### `cs2node doctor` says the daemon is not answering
+
+```bash
+systemctl status cs2node
+journalctl -u cs2node -n 50
+```
+
+A module that fails to start does not take the daemon down; it is logged and dropped. The journal says which one and why.
+
+### Doctor says the daemon is a different build from the binary
+
+You copied a new binary but did not restart the service:
+
+```bash
+sudo systemctl restart cs2node
+```
+
+Dev builds all carry the same version number, so `doctor` compares build stamps too.
+
+### `shared dir not mounted` on a server
+
+The read-only mount is missing inside that container. Either the kernel is older than 5.2, or the daemon was not running when the container started. Restart the server. On an old kernel, switch `push_method` to `copy`.
+
+### A real player got blocked
+
+```bash
+sudo cs2node why <ip>        # what tripped, when, how often
+sudo cs2node unblock <ip>
+```
+
+Then raise that rule's threshold, or add them to `whitelist_ips`. If it keeps happening on one rule, put `block_mode` back to `log` for a day and read `/var/log/cs2node/guard-rates.log`.
+
+### Nothing is being blocked
+
+- Is the module on? `cs2node status` has a Host guard section.
+- `block_mode` on `log` reports without blocking. That is the default for a reason; switch it to `enforce` when you are happy.
+- The egg's own detections need `ENABLE_GUARD=1` on the server.
+
+### The workshop cache does not seem to do anything
+
+It works on a server's next boot, never on a running one. `cs2node workshop` lists what is cached and how many servers share each item. `cs2node workshop sync <server>` runs the pass by hand for a stopped server.
+
+### A backup or restore failed
+
+`cs2node backups` shows what exists. `restore` refuses a running server, and refuses a volume it cannot find; pass `--volume /path` for a non-standard layout. The journal has the underlying error.
+
+## Still stuck
+
+Open an issue with:
+
+- The server console around the problem, not just the last line.
+- `sudo cs2node doctor` output.
+- `journalctl -u cs2node -n 100` if the node is involved.
+- `cs2node version` and the image tag the server runs.
+
+That is usually enough to answer without a second round of questions.
+
+---
+
+[Docs index](README.md)

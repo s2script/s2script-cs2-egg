@@ -1,88 +1,143 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
-name: Release
+name: release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build
+        required: true
 permissions:
   contents: read
 concurrency:
   group: release-s2script-cs2-egg
   cancel-in-progress: false
 jobs:
-  check:
+  node:
     if: github.repository == 's2script/s2script-cs2-egg'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Validate release tag and prerelease flag
-        run: python3 scripts/release.py event
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.27.2'
-          cache: false
-      - name: Validate, test and package exact source
-        run: |
-          tag="$(python3 scripts/release.py event)"
-          make test vet egg-check release-check
-          go test -race ./...
-          python3 -m venv "$RUNNER_TEMP/schema"
-          "$RUNNER_TEMP/schema/bin/pip" install -r tests/schema-requirements.txt
-          make schema-check SCHEMA_PYTHON="$RUNNER_TEMP/schema/bin/python"
-          go run ./cmd/releasectl pack --tag "$tag" --output "$RUNNER_TEMP/release"
-  publish:
-    needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.rel.outputs.tag }}
+      version: ${{ steps.rel.outputs.version }}
+      channel: ${{ steps.rel.outputs.channel }}
+      commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - name: Select release channel
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]
+          prerelease=$(gh release view "$TAG" --json isPrerelease -q .isPrerelease)
+          version="${TAG#v}"
+          case "$prerelease" in
+            true) channel=beta ;;
+            false) channel=stable; [[ "$version" != *-* ]] ;;
+            *) exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.rel.outputs.tag }}
+          persist-credentials: false
+      - name: Validate checked-out source
+        id: source
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+        run: |
+          test "$(cat VERSION)" = "$VERSION"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go vet ./... && go test ./...
+      - name: Build matching node assets
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+          CHANNEL: ${{ steps.rel.outputs.channel }}
+          COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          set -euo pipefail
+          make node
+          mkdir -p dist/release
+          cp dist/cs2node dist/release/cs2node_linux_amd64
+          cp LICENSE NOTICE UPSTREAM.md dist/release/
+          cp "$(go env GOROOT)/LICENSE" dist/release/Go-LICENSE
+          (cd dist/release && sha256sum cs2node_linux_amd64 > checksums.txt)
+      - name: Attach node assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: gh release upload "$TAG" dist/release/* --clobber
+      - name: Verify downloadable node
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir verify && cd verify
+          gh release download "$TAG" -p cs2node_linux_amd64 -p checksums.txt
+          sha256sum -c checksums.txt
+          chmod +x cs2node_linux_amd64
+          ./cs2node_linux_amd64 version
+  image:
+    needs: node
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
+          ref: ${{ needs.node.outputs.commit }}
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.27.2'
-          cache: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish immutable assets and advance eligible image channels
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          tag="$(python3 scripts/release.py event)"
-          go build -trimpath -o "$RUNNER_TEMP/releasectl" ./cmd/releasectl
-          "$RUNNER_TEMP/releasectl" pack --tag "$tag" --output "$RUNNER_TEMP/release"
-          python3 scripts/release.py publish "$RUNNER_TEMP/release" "$RUNNER_TEMP/releasectl"
-  public-verification:
-    needs: publish
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and publish SteamRT3 image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v6
         with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.27.2'
-          cache: false
-      # Hosted runner supplies buildx. No login action, secret or repository token
-      # enters the verification process; its Docker config starts empty.
-      - name: Verify anonymous public availability
+          context: .
+          file: docker/KitsuneLab-Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/s2script/s2script-cs2-egg:${{ needs.node.outputs.tag }}
+          build-args: |
+            VERSION=${{ needs.node.outputs.version }}
+            CHANNEL=${{ needs.node.outputs.channel }}
+            COMMIT=${{ needs.node.outputs.commit }}
+      - name: Verify image entrypoint
+        run: docker run --rm ghcr.io/s2script/s2script-cs2-egg:${{ needs.node.outputs.tag }} /usr/local/bin/cs2egg version
+      - name: Advance channel only for its newest release
         env:
-          DOCKER_CONFIG: ${{ runner.temp }}/anonymous-docker
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.node.outputs.tag }}
+          CHANNEL: ${{ needs.node.outputs.channel }}
         run: |
-          go build -trimpath -o "$RUNNER_TEMP/releasectl" ./cmd/releasectl
-          python3 scripts/release.py public-verify "$RUNNER_TEMP/releasectl"
+          set -euo pipefail
+          if [ "$CHANNEL" = stable ]; then
+            newest=$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name)
+          else
+            newest=$(gh api "repos/$GH_REPO/releases" --jq '[.[] | select(.draft == false)][0].tag_name')
+          fi
+          if [ "$TAG" != "$newest" ]; then
+            echo "Rebuilt $TAG; leaving $CHANNEL on the newer release $newest."
+            exit 0
+          fi
+          docker buildx imagetools create \
+            --tag "ghcr.io/s2script/s2script-cs2-egg:$CHANNEL" \
+            "ghcr.io/s2script/s2script-cs2-egg:$TAG"

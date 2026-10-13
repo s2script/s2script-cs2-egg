@@ -1,37 +1,18 @@
-SPDX-License-Identifier: GPL-3.0-or-later
-Copyright (C) 2026 S2Script CS2 Egg contributors
+S2Script CS2 Egg is a downstream fork of CS2-Egg-Go.
 
-Project code is licensed under the GNU General Public License, version 3
-or (at your option) any later version. See LICENSE for the complete text.
+Upstream: https://github.com/K4ryuu/CS2-Egg-Go
+Baseline: 70e8d88bb5838d36d82e14a7f397ee1210a2ebc5
+Copyright (C) 2024-2026 Kőrösfalvi "K4ryuu" Martin.
+Copyright (C) 2026 S2Script CS2 Egg contributors.
 
-CS2-Egg-Go by K4ryuu supplied the operational feature reference and its
-GPL-3.0-or-later licensing requirement. The guard console grammar was researched/adapted
-from internal/egg/guard/guard.go at revision
-2ceeea15825b52856a7ef157e8bd70ffb7ab2cbf; detector, correlation, privilege
-and policy code is implemented here.
-No upstream product module is imported. The container rootfs re-export
-approach was adapted from its docker/KitsuneLab-Dockerfile at revision
-2ceeea15825b52856a7ef157e8bd70ffb7ab2cbf. Project adaptations remain GPL-3.0-or-later.
-https://github.com/K4ryuu/CS2-Egg-Go
+Project code remains licensed under GPL-3.0-or-later; see LICENSE.
+Upstream package paths, daemon/entrypoint names and core behaviour are retained
+to keep the downstream patch small. S2Script-focused extensions replace the
+other modding framework updaters and add plugin management, MultiAddonManager
+and GameFixes. Images and self-updates use the S2Script repository.
 
-S2Script's plugin identities/default placements were researched against
-s2script/s2script revision 86d1de3ba7366b08f7e8bb0db34ca2a1e84415d7.
-No S2Script implementation code is included.
-https://github.com/s2script/s2script
-
-LICENSE is verbatim GPL-3.0-or-later license text from the local SPDX license
-collection at /usr/share/licenses/spdx/GPL-3.0-or-later.txt (Arch Linux
-licenses package 20240728-1). The license text is Copyright (C) 2007 Free
-Software Foundation, Inc.; verbatim copying and distribution are permitted.
-https://www.gnu.org/licenses/gpl-3.0.html
-
-Compiled binaries include the Go 1.27.2 runtime/standard library. Their BSD
-notice is included at third_party/Go-LICENSE in source and alongside LICENSE
-and NOTICE in /usr/local/share/licenses/s2egg inside images.
-
-Runtime images preserve Valve SteamRT distribution/component notices and
-include the inspected SteamCMD bootstrap under /opt/s2egg/steamcmd. Those
-components retain their own terms; the bootstrap hash is an observed integrity
-pin, not a publisher signature. CS2, Metamod and S2Script are downloaded on
-first startup and retain their respective licenses. Debug images additionally
-install distribution-provided gdb/gdbserver and preserve package notices.
+S2Script, Metamod, MultiAddonManager, GameFixes, Valve SteamCMD/SteamRT and
+downloaded plugins retain their respective licences and notices. They are
+downloaded separately rather than included as implementation source here.
+Go and Go module dependencies retain their upstream licences. Container images
+include this notice, LICENSE and Go's licence with the compiled entrypoint.

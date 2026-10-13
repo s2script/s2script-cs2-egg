@@ -1,112 +1,45 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
-name: CI
+name: ci
+
 on:
   push:
+    branches: ["**"]
   pull_request:
+
+# nothing here writes anything back to the repository
 permissions:
   contents: read
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+
 jobs:
   go:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.27.2'
-          cache: false # stdlib-only module has no go.sum
-      - run: go test ./...
-      - name: Node setup wizard fixtures (no live host provisioning)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-yaml acl
-          python3 -m unittest discover -s tests/setup -v
-      - name: Cross-UID shared, operations and backup helpers (isolated ephemeral fixture only)
-        run: |
-          CGO_ENABLED=0 go test -c -o /tmp/s2shared-permission.test ./internal/shared
-          sudo env S2SHARED_PRIVILEGED_TEST=1 /tmp/s2shared-permission.test -test.run=^TestCrossUIDHelperFixture$ -test.v
+          go-version-file: go.mod
       - run: go vet ./...
-      - run: go test -race ./...
-      - run: make build egg-check
-        env:
-          CGO_ENABLED: '0'
-          GOOS: linux
-          GOARCH: amd64
-      - name: Release contract and examples (offline fixtures)
-        run: make release-check
-      - name: Validate actual public schema producers
+      - run: go test ./...
+      # the daemon runs one goroutine per container plus the samplers; a
+      # race here is a production bug, not a test flake
+      - run: go test -race ./tests/...
+      - run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./...
+      # a known CVE in a dependency is a build failure, not a thing to
+      # notice later: x/net shipped 12 of them behind the docker client
+      - name: govulncheck
         run: |
-          python3 -m venv "$RUNNER_TEMP/schema"
-          "$RUNNER_TEMP/schema/bin/pip" install -r tests/schema-requirements.txt
-          make schema-check SCHEMA_PYTHON="$RUNNER_TEMP/schema/bin/python"
-      - name: Check formatting
-        run: test -z "$(gofmt -l cmd internal tests)"
-  images:
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  image:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [runtime, debug]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Build from source without publishing
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        env:
-          DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
-          file: docker/Dockerfile
-          target: ${{ matrix.target }}
+          file: docker/KitsuneLab-Dockerfile
           platforms: linux/amd64
-          tags: s2script-cs2-egg:ci-${{ matrix.target }}
           load: true
-          push: false
-      - name: Check non-root configuration and immutable bootstrap (no game download)
-        env:
-          IMAGE: s2script-cs2-egg:ci-${{ matrix.target }}
-          TARGET: ${{ matrix.target }}
-        run: |
-          docker run --rm --entrypoint /bin/sh "$IMAGE" -ec '
-            test "$(id -u)" -ne 0
-            test "$HOME" = /home/container
-            test -w "$HOME"
-            test -x /usr/bin/env
-            test -x /bin/bash
-            test -e /lib/ld-linux.so.2
-            for f in steamcmd.sh linux32/steamcmd linux32/steamerrorreporter linux32/libstdc++.so.6 linux32/crashhandler.so; do
-              test -s "/opt/s2egg/steamcmd/$f"
-              test ! -w "/opt/s2egg/steamcmd/$f"
-            done
-            test -r /usr/local/share/licenses/s2egg/Go-LICENSE
-            ALLOW_TOKENLESS=1 s2egg config check --root /home/container
-          '
-          if [ "$TARGET" = debug ]; then
-            docker run --rm --entrypoint /bin/sh "$IMAGE" -ec 'command -v gdbserver; command -v gdb'
-          fi
-      - name: Check panel startup command and container bind (no game download)
-        env:
-          IMAGE: s2script-cs2-egg:ci-${{ matrix.target }}
-        run: |
-          # Wings supplies its own UID, a read-only rootfs and a writable volume.
-          # Exercise the image CMD, including an early actionable config failure.
-          status=0
-          docker run --rm --network none --read-only --user 12345:12345 \
-            --tmpfs /home/container:rw,uid=12345,gid=12345,mode=0700 \
-            -e SERVER_IP=203.0.113.10 -e SERVER_PORT=28015 \
-            "$IMAGE" > "$RUNNER_TEMP/panel-startup.log" 2>&1 || status=$?
-          cat "$RUNNER_TEMP/panel-startup.log"
-          test "$status" -eq 1
-          grep -F 'Starting S2Script CS2' "$RUNNER_TEMP/panel-startup.log"
-          grep -F 'STEAM_ACC' "$RUNNER_TEMP/panel-startup.log"
-          docker run --rm --network none --read-only --user 12345:12345 \
-            --tmpfs /home/container:rw,uid=12345,gid=12345,mode=0700 \
-            -e ALLOW_TOKENLESS=1 -e SERVER_IP=203.0.113.10 -e SERVER_PORT=28015 \
-            --entrypoint /usr/local/bin/s2egg "$IMAGE" config show --root /home/container \
-            | jq -e '.launch.ip == "0.0.0.0" and .launch.port == 28015'
+          tags: s2script-cs2-egg:ci
+      - run: docker run --rm s2script-cs2-egg:ci /usr/local/bin/cs2egg version

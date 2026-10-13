@@ -1,25 +1,59 @@
 # Contributing
 
-Use Linux amd64 and Go 1.27.2. Production code uses the Go standard library.
-Create a branch and keep changes focused; include a reproducer for behavioral
-fixes and update operator documentation when settings or recovery behavior change.
+Bug reports, ideas and pull requests are all welcome. This is a small project with one maintainer, so a short conversation before a big change saves everyone time.
 
-Run `make test vet build egg-check release-check`, `go test -race ./...` and
-the isolated schema check in the README. CI also builds both images and runs a
-separate-UID helper fixture on a disposable runner. Do not run that privileged
-fixture on a production host.
+## Reporting a bug
 
-Keep generated egg/catalog files synchronized with `make egg`. Do not edit
-generated output alone. Release manifests use `internal/releasecontract` as the
-shared producer/consumer authority. Preserve source identity, fail-closed
-validation, lease ordering, disabled placement, config/data ownership and
-idempotent action receipts.
+Use the [issue templates](https://github.com/s2script/s2script-cs2-egg/issues/new/choose). What actually helps:
 
-Use fake HTTP/Steam/game/helper boundaries in automated tests. Never contact a
-real Discord webhook, modify host services/firewall, or download a full game as
-an implicit test. Record live acceptance separately.
+- The server console around the problem, not just the last line.
+- `sudo cs2node doctor` output when the node is involved.
+- `journalctl -u cs2node -n 100` for anything daemon-side.
+- `cs2node version` and the image tag the server runs.
 
-Include SPDX GPL-3.0-or-later headers in new project source and preserve upstream
-notices. Do not commit secrets, private configuration, game binaries or generated
-release binaries. A PR does not publish artifacts; maintainers use the explicit
-[release procedure](../docs/releases.md).
+"It does not work" with no output means someone has to ask for all of that anyway.
+
+## Suggesting a feature
+
+Say what you are trying to do, not just what to build. Half the modules in here started as somebody describing a problem, and the answer ended up different from the request.
+
+Something a plugin can do belongs in a plugin. This project is for what needs the node or the container.
+
+## Pull requests
+
+```bash
+make test        # go test ./...
+make vet         # go vet ./...
+```
+
+Both have to pass. CI runs them anyway.
+
+What gets a PR merged quickly:
+
+- One thing at a time. A bug fix and a refactor in the same diff is two reviews.
+- A test that fails before your fix. Bugs that came back once come back again.
+- The existing style. Look at the file you are editing; it is consistent on purpose.
+
+### The house rules
+
+**Console output is a stable interface.** Server owners read it every day and scripts grep it. The format, the levels, the `KL-` codes: those change only deliberately.
+
+**Modules never import each other.** A node module talks to `core` and nothing else. If two modules need to share a fact, that is what the notice bus is for.
+
+**Tests live in `tests/`, never next to the source**, as external packages. If a test needs something unexported, the seam is in the wrong place.
+
+**Nothing from a container is trusted.** Every write into a server volume goes through a path-restricted root, every message is bounded, every path is validated. See the [security model](https://github.com/s2script/s2script-cs2-egg/blob/main/docs/security.md) before touching anything on that boundary.
+
+**No shell.** The image has no shell scripts and the daemon does not spawn one. SteamCMD is invoked with an argument list.
+
+### Comments
+
+Comment why, not what. Exported functions get a doc comment saying what a caller needs to know, including the surprising parts. Skip comments that restate the line under them.
+
+## Where things are
+
+[Architecture](https://github.com/s2script/s2script-cs2-egg/blob/main/docs/development/architecture.md) has the map, [building](https://github.com/s2script/s2script-cs2-egg/blob/main/docs/development/building.md) has the commands, [testing](https://github.com/s2script/s2script-cs2-egg/blob/main/docs/development/testing.md) has the layout of the suites.
+
+## Licence
+
+By contributing you agree your work ships under the repository's [licence](https://github.com/s2script/s2script-cs2-egg/blob/main/LICENSE), the GNU General Public License v3 or later. That means anyone who distributes a modified `cs2egg` or `cs2node`, or an image built from them, has to hand over the source of their changes on the same terms.
