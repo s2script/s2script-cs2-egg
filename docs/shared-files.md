@@ -1,5 +1,9 @@
 # Immutable shared CS2 files
 
+**For installation, use [Node setup](node-setup.md).** That walkthrough covers
+fresh setup and migration from a partial standalone download, using symlink mode.
+This page describes delivery choices, helpers, ownership and recovery in detail.
+
 The optional node module installs Steam app **730** into a fresh staging directory and publishes a complete, immutable generation. It never updates published files or runs SteamCMD against a private tree containing shared links. The default host store is `/srv/s2node/shared`; the container mount target is `/mnt/s2node`.
 
 Enable `shared.enabled` in the node configuration, set an absolute path to a dedicated, already bootstrapped host SteamCMD executable, and provision the store for the non-root daemon UID. No command installs users, changes mounts, enables services or changes kernel settings. Build as that daemon UID:

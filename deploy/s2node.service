@@ -29,7 +29,7 @@ ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-# Add ONLY each registered volume's egg directory in an operator drop-in.
+# Add registered egg directories and enabled module stores in an operator drop-in.
 ReadWritePaths=/run/s2node /var/lib/s2node
 TimeoutStopSec=45
 

@@ -3,10 +3,15 @@
 Linux x86-64 is the supported platform. For a panel installation, use the
 [egg URL and published images](#pterodactyl-or-pelican). No Go toolchain or local
 image build is needed once the selected release has passed
-[public availability verification](releases.md). The first alpha publication is
-still pending; until then, use [source builds](#build-from-source) for development.
+[public availability verification](releases.md). Use
+[source builds](#build-from-source) for development.
 Native CS2, SteamCMD initialization, Metamod/S2Script loading, panel import and
 HUD acceptance require the checklist in [testing.md](testing.md).
+
+**Sharing game files across servers?** Shared installs are optional and require
+host setup. Follow the [node setup walkthrough](node-setup.md), including when
+switching from a standalone download that has already started. Otherwise, this
+page installs a complete standalone server with no node daemon.
 
 ## Host preparation
 
