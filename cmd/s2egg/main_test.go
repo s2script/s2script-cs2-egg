@@ -78,6 +78,14 @@ func TestCLIRejectsInvalidConfigAndUnknownCommands(t *testing.T) {
 	}
 }
 
+func TestStartupBannerPrecedesConfigurationFailure(t *testing.T) {
+	var out, errs bytes.Buffer
+	code := run([]string{"run", "--root", t.TempDir()}, func(string) (string, bool) { return "", false }, &out, &errs)
+	if code != 1 || !strings.Contains(out.String(), "Starting S2Script CS2") || !strings.Contains(errs.String(), "STEAM_ACC") {
+		t.Fatalf("startup failure must identify the running launcher and cause: code=%d stdout=%q stderr=%q", code, out.String(), errs.String())
+	}
+}
+
 func TestPluginCommandsAreRouted(t *testing.T) {
 	root := t.TempDir()
 	lookup := func(k string) (string, bool) { return "1", k == "ALLOW_TOKENLESS" }

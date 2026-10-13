@@ -49,7 +49,7 @@ func TestGameProviderCallerOwnsBothLocksAndFailureDoesNotFallback(t *testing.T) 
 }
 func TestProviderUnclaimedErrorDoesNotFallThrough(t *testing.T) {
 	sentinel := errors.New("uncertain provider response")
-	o := defaultPreparation()
+	o := defaultPreparation(nil)
 	steam := withProvider(o.steam, providerFunc(func(context.Context, config.Server) (bool, error) { return false, sentinel }))
 	if _, e := steam(context.Background(), config.Server{Root: t.TempDir()}); !errors.Is(e, sentinel) {
 		t.Fatal("provider uncertainty fell through")

@@ -78,6 +78,9 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 	if flags.NArg() != 0 {
 		return usage()
 	}
+	if command == "run" || command == "prepare" {
+		fmt.Fprintf(out, "Starting S2Script CS2 (%s, %s)...\n", buildinfo.Version, buildinfo.Revision)
+	}
 	server, err := config.LoadServer(*root, lookup)
 	if err != nil {
 		fmt.Fprintln(errs, "configuration error:", err)
@@ -164,7 +167,7 @@ func run(args []string, lookup func(string) (string, bool), out, errs io.Writer)
 		// releases its runtime/artifact locks.
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		options := runtime.Options{}
+		options := runtime.Options{PreparationLog: out}
 		connectCtx, cancel := context.WithTimeout(ctx, time.Second)
 		client, connectErr := nodeclient.Connect(connectCtx, filepath.Join(server.Root, "egg/s2node.sock"))
 		cancel()

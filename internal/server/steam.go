@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -62,7 +63,7 @@ func copyRuntimeFile(dest *os.Root, target string, source *os.Root, path string,
 	}
 	return dest.Rename(temp, target)
 }
-func prepareSteam(ctx context.Context, cfg config.Server, seed string) (string, error) {
+func prepareSteam(ctx context.Context, cfg config.Server, seed string, log io.Writer) (string, error) {
 	for _, name := range []string{".s2shared.json", ".s2shared-pending.json"} {
 		if _, e := os.Lstat(filepath.Join(cfg.Root, name)); !errors.Is(e, os.ErrNotExist) {
 			return "", errors.New("shared install cannot use standalone SteamCMD; restore node/mount or run s2egg shared-standalone while stopped")
@@ -97,8 +98,9 @@ func prepareSteam(ctx context.Context, cfg config.Server, seed string) (string, 
 		return "", e
 	}
 	if !present {
-		if e = steam.Bootstrap(ctx, executable, cfg.Root); e != nil {
-			return "", e
+		preparationMessage(log, "Initializing SteamCMD...")
+		if e = steam.Bootstrap(ctx, executable, cfg.Root, log); e != nil {
+			return "", fmt.Errorf("SteamCMD initialization: %w", e)
 		}
 	}
 	present, e = safeRegular(root, "steamcmd/linux64/steamclient.so")
@@ -107,12 +109,14 @@ func prepareSteam(ctx context.Context, cfg config.Server, seed string) (string, 
 	}
 	var build string
 	if cfg.Steam.Update {
-		build, e = steam.Update(ctx, executable, cfg.Root, cfg.Steam.Validate, nil)
+		preparationMessage(log, "Installing/updating CS2 app 730; the first download may take a while...")
+		build, e = steam.Update(ctx, executable, cfg.Root, cfg.Steam.Validate, log)
 	} else {
+		preparationMessage(log, "Steam updates disabled; checking installed CS2...")
 		build, e = steam.InstalledBuild(cfg.Root)
 	}
 	if e != nil {
-		return "", e
+		return "", fmt.Errorf("CS2 preparation: %w", e)
 	}
 	for _, arch := range []string{"64", "32"} {
 		source := "steamcmd/linux" + arch + "/steamclient.so"

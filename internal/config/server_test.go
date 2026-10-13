@@ -114,7 +114,7 @@ func TestConfigPrecedenceAndPluginDefaults(t *testing.T) {
 }
 
 func TestCustomParametersRemainData(t *testing.T) {
-	s := load(t, map[string]string{"CUSTOM_PARAMS": `+hostname "test server" ; $(touch /tmp/never-run)`, "SERVER_IP": "127.0.0.1"})
+	s := load(t, map[string]string{"CUSTOM_PARAMS": `+hostname "test server" ; $(touch /tmp/never-run)`, "S2EGG_BIND_IP": "127.0.0.1"})
 	want := []string{"+hostname", "test server", ";", "$(touch", "/tmp/never-run)"}
 	b, _ := json.Marshal(s.Launch.ExtraArgs)
 	w, _ := json.Marshal(want)
@@ -123,8 +123,19 @@ func TestCustomParametersRemainData(t *testing.T) {
 	}
 }
 
+func TestPanelAllocationDoesNotBecomeContainerBindAddress(t *testing.T) {
+	s := load(t, map[string]string{"SERVER_IP": "203.0.113.10", "SERVER_PORT": "28015"})
+	if s.Launch.IP != "0.0.0.0" || s.Launch.Port != 28015 {
+		t.Fatalf("external allocation used inside container: %s:%d", s.Launch.IP, s.Launch.Port)
+	}
+	s = load(t, map[string]string{"SERVER_IP": "203.0.113.10", "S2EGG_BIND_IP": "127.0.0.1"})
+	if s.Launch.IP != "127.0.0.1" {
+		t.Fatalf("explicit bind address ignored: %s", s.Launch.IP)
+	}
+}
+
 func TestRejectUnsafeSettings(t *testing.T) {
-	for _, tc := range []struct{ key, value string }{{"SERVER_IP", "bad"}, {"S2SCRIPT_CHANNEL", "nightly"}, {"S2SCRIPT_VERSION", "https://evil.test/v1"}, {"METAMOD_VERSION", "../v1"}, {"S2SCRIPT_PLUGIN_FILE", "../outside.json"}, {"S2SCRIPT_PLUGIN_FILE", "/tmp/outside.json"}, {"S2SCRIPT_PLUGIN_BASECHAT", "yes"}, {"CUSTOM_PARAMS", `"unterminated`}, {"GAME_TYPE", "-1"}} {
+	for _, tc := range []struct{ key, value string }{{"S2EGG_BIND_IP", "bad"}, {"S2SCRIPT_CHANNEL", "nightly"}, {"S2SCRIPT_VERSION", "https://evil.test/v1"}, {"METAMOD_VERSION", "../v1"}, {"S2SCRIPT_PLUGIN_FILE", "../outside.json"}, {"S2SCRIPT_PLUGIN_FILE", "/tmp/outside.json"}, {"S2SCRIPT_PLUGIN_BASECHAT", "yes"}, {"CUSTOM_PARAMS", `"unterminated`}, {"GAME_TYPE", "-1"}} {
 		t.Run(tc.key+tc.value, func(t *testing.T) {
 			_, err := config.LoadServer(t.TempDir(), lookup(map[string]string{"ALLOW_TOKENLESS": "1", tc.key: tc.value}))
 			if err == nil {

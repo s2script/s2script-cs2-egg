@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/s2script/s2script-cs2-egg/internal/artifact"
 	"github.com/s2script/s2script-cs2-egg/internal/config"
@@ -35,6 +36,7 @@ type Options struct {
 	WorkshopProvider WorkshopProvider
 	GameProvider     GameProvider
 	ControlProvider  ControlProvider
+	PreparationLog   io.Writer
 }
 type preparationRunKey struct{}
 
@@ -60,6 +62,7 @@ func withProvider(standalone func(context.Context, config.Server) (string, error
 }
 
 type prepOptions struct {
+	log      io.Writer
 	workshop WorkshopProvider
 	retained func(context.Context, config.Server, map[string]string) (framework.Selection, error)
 	steam    func(context.Context, config.Server) (string, error)
@@ -68,8 +71,16 @@ type prepOptions struct {
 	plugins  func(context.Context, config.Server, plugins.Policy, []plugins.Installed, framework.Selection, []framework.BundledArtifact) (plugins.Prepared, error)
 }
 
-func defaultPreparation() prepOptions {
-	return prepOptions{steam: func(ctx context.Context, c config.Server) (string, error) { return prepareSteam(ctx, c, SteamSeed) }, resolve: framework.Resolve, retained: framework.Retained, native: framework.Prepare, plugins: plugins.Prepare}
+func defaultPreparation(log io.Writer) prepOptions {
+	return prepOptions{log: log, steam: func(ctx context.Context, c config.Server) (string, error) {
+		return prepareSteam(ctx, c, SteamSeed, log)
+	}, resolve: framework.Resolve, retained: framework.Retained, native: framework.Prepare, plugins: plugins.Prepare}
+}
+
+func preparationMessage(log io.Writer, message string) {
+	if log != nil {
+		fmt.Fprintln(log, message)
+	}
 }
 
 // Prepare takes the runtime lease before artifact recovery and holds it through
@@ -96,7 +107,15 @@ func prepareRuntimeOptions(ctx context.Context, cfg config.Server, emit emitFunc
 	if cfg.Workshop.Enabled && options.WorkshopProvider == nil {
 		return nil, errors.New("workshop sharing enabled but node unavailable")
 	}
-	preparation := defaultPreparation()
+	var log io.Writer
+	if options.PreparationLog != nil {
+		// Reuse the game console's line buffering, redaction and reserved-marker
+		// filtering before exposing download output to the panel.
+		console := &consoleWriter{mu: &sync.Mutex{}, out: options.PreparationLog, redact: redactFor(cfg), emit: func(string, string, map[string]string) {}}
+		defer console.flush()
+		log = console
+	}
+	preparation := defaultPreparation(log)
 	if options.ArtifactFetcher != nil {
 		preparation.native = func(ctx context.Context, root string, s framework.Selection) (framework.Prepared, error) {
 			return framework.PrepareWithFetcher(ctx, root, s, options.ArtifactFetcher)
@@ -122,6 +141,7 @@ func prepareWith(ctx context.Context, cfg config.Server, emit emitFunc, o prepOp
 	if e = ctx.Err(); e != nil {
 		return nil, e
 	}
+	preparationMessage(o.log, "Preparing CS2 game files...")
 	build, e := o.steam(ctx, cfg)
 	if e != nil {
 		return nil, e
@@ -139,6 +159,7 @@ func prepareWith(ctx context.Context, cfg config.Server, emit emitFunc, o prepOp
 		return nil, e
 	}
 	if o.workshop != nil {
+		preparationMessage(o.log, "Preparing shared Workshop files...")
 		if e = o.workshop.PrepareWorkshopLocked(ctx, cfg); e != nil {
 			return nil, e
 		}
@@ -176,13 +197,14 @@ func ReconcileLocked(ctx context.Context, cfg config.Server, req plugins.Reconci
 			fmt.Fprintln(log, redactFor(cfg)("warning: "+reason+" "+d["message"]))
 		}
 	}
-	_, e := reconcileManaged(ctx, cfg, req.Policy, req.Installed, emit, defaultPreparation())
+	_, e := reconcileManaged(ctx, cfg, req.Policy, req.Installed, emit, defaultPreparation(log))
 	if e != nil {
 		return errors.New(redactFor(cfg)(e.Error()))
 	}
 	return nil
 }
 func reconcileManaged(ctx context.Context, cfg config.Server, policy plugins.Policy, installed []plugins.Installed, emit emitFunc, o prepOptions) (map[string]string, error) {
+	preparationMessage(o.log, "Checking compatible Metamod and S2Script releases...")
 	pins := map[string]string{}
 	for name, p := range policy.Plugins {
 		if p.Source == "release" && plugins.ExactVersion(p.Version) {
@@ -193,6 +215,7 @@ func reconcileManaged(ctx context.Context, cfg config.Server, policy plugins.Pol
 	if e != nil {
 		return nil, e
 	}
+	preparationMessage(o.log, "Preparing Metamod and S2Script files...")
 	prepared, e := o.native(ctx, cfg.Root, selection)
 	if e != nil {
 		prepared.Cleanup()
@@ -220,6 +243,7 @@ func reconcileManaged(ctx context.Context, cfg config.Server, policy plugins.Pol
 	for _, warning := range selection.Warnings {
 		emit("server.warning", "framework_warning", map[string]string{"message": warning})
 	}
+	preparationMessage(o.log, "Checking installed plugins and preparing updates...")
 	p, e := o.plugins(ctx, cfg, policy, installed, selection, prepared.Bundled)
 	if e != nil {
 		return nil, e

@@ -69,6 +69,13 @@ func TestSteamFailuresAndCancellation(t *testing.T) {
 	}
 }
 
+func TestSteamFailureReportsExitStatus(t *testing.T) {
+	_, err := LatestBuild(context.Background(), fakeSteam(t, "exit 8"))
+	if err == nil || !strings.Contains(err.Error(), "exit code 8") {
+		t.Fatalf("Steam failure lost exit status: %v", err)
+	}
+}
+
 func TestSteamCancellationStopsDescendants(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "orphan-marker")
 	f := fakeSteam(t, "sh -c 'sleep 1; echo survived > "+marker+"' &\nwait\n")

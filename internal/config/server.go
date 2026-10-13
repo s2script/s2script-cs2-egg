@@ -197,7 +197,9 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 	if lookup == nil {
 		lookup = os.LookupEnv
 	}
-	stringVars := map[string]*string{"SERVER_ID": &s.Identity, "SERVER_IP": &s.Launch.IP, "SRCDS_MAP": &s.Launch.Map, "STEAM_ACC": &s.Steam.GSLT, "CUSTOM_PARAMS": &s.Launch.CustomParams, "S2SCRIPT_CHANNEL": &s.Frameworks.Channel, "S2SCRIPT_VERSION": &s.Frameworks.S2ScriptVersion, "METAMOD_VERSION": &s.Frameworks.MetamodVersion, "S2SCRIPT_PLUGIN_FILE": &s.Plugins.File, "DISCORD_WEBHOOK_URL": &s.Webhook.URL}
+	// SERVER_IP is the panel's external allocation, which need not exist inside
+	// the container. Bind all container interfaces unless explicitly overridden.
+	stringVars := map[string]*string{"SERVER_ID": &s.Identity, "S2EGG_BIND_IP": &s.Launch.IP, "SRCDS_MAP": &s.Launch.Map, "STEAM_ACC": &s.Steam.GSLT, "CUSTOM_PARAMS": &s.Launch.CustomParams, "S2SCRIPT_CHANNEL": &s.Frameworks.Channel, "S2SCRIPT_VERSION": &s.Frameworks.S2ScriptVersion, "METAMOD_VERSION": &s.Frameworks.MetamodVersion, "S2SCRIPT_PLUGIN_FILE": &s.Plugins.File, "DISCORD_WEBHOOK_URL": &s.Webhook.URL}
 	for k, p := range stringVars {
 		if v, ok := lookup(k); ok {
 			*p = v
@@ -242,7 +244,7 @@ func LoadServer(root string, lookup func(string) (string, bool)) (Server, error)
 		return fail(errors.New("SRCDS_MAXPLAYERS must be in 1..64"))
 	}
 	if net.ParseIP(s.Launch.IP) == nil {
-		return fail(errors.New("SERVER_IP must be an IP address"))
+		return fail(errors.New("S2EGG_BIND_IP / launch.ip must be an IP address"))
 	}
 	if s.Launch.GameType < 0 || s.Launch.GameMode < 0 {
 		return fail(errors.New("GAME_TYPE and GAME_MODE must be nonnegative"))

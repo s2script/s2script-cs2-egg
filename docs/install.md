@@ -53,7 +53,7 @@ umask 077
 cat > server.env <<'ENV'
 STEAM_ACC=
 DISCORD_WEBHOOK_URL=
-SERVER_IP=0.0.0.0
+S2EGG_BIND_IP=0.0.0.0
 SERVER_PORT=27015
 ENV
 docker volume create s2script-server
@@ -94,12 +94,17 @@ Use `docker stop --time 30 s2script-cs2` for direct Docker shutdown. Budget: gam
    require checking [GHCR visibility](releases.md#publish).
 3. Assign the reachable game allocation. `SERVER_IP` and `SERVER_PORT` come
    from the panel allocation and are absent from editable egg variables.
+   CS2 binds to `0.0.0.0` inside the container using the allocated `SERVER_PORT`;
+   the host's `SERVER_IP` is not a container bind address.
    Provide your GSLT as `STEAM_ACC`, optionally set a private webhook URL, and
    retain bundled plugin `default` controls unless overriding them.
 4. The panel installer uses `ghcr.io/pterodactyl/installers:debian` and finishes
    without downloading CS2. **Start the server** to install CS2, Metamod and
    S2Script into the persistent root. Allow adequate first-install time, disk
    and network access; preparation takes longer than a warm game launch.
+   The console shows the launcher version, preparation stages and SteamCMD
+   progress. A message-only installer is expected; see the
+   [startup troubleshooting and CS2-Egg-Go comparison](troubleshooting.md#panel-startup-and-cs2-egg-go).
 5. Verify `S2EGG_READY`, `s2egg status`, client connection, native frameworks
    and plugin behavior. Panel stop is `quit`. Confirm there is one down event
    per ready run.
