@@ -54,7 +54,4 @@ roll back ordinary errors. The former independent durable artifact journal is
 not imported. An abrupt process or host failure during a multi-file update can
 require repair on the next boot; this is not a crash-atomic transaction engine.
 
-The first fork release is `v0.2.0-alpha.1`. Its binary/asset names follow upstream:
-`cs2node_linux_amd64` and `checksums.txt`. Existing 0.1.x release assets cannot run
-this installer. The release must be published and its workflow pass before using
-the release-download command; until then, `make node` provides a source build.
+Release versions are taken from the published GitHub tag, independently of the local-development `VERSION` fallback. Asset names follow upstream: `cs2node_linux_amd64` and `checksums.txt`. The bootstrap resolves stable/beta metadata to one exact tag and requires both assets; old independent-generation assets cannot run this installer. Egg exports follow `:stable`/`:beta`, with optional operator-selected version tags. No per-release source edits are required.

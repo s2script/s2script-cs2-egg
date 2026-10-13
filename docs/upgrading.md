@@ -11,7 +11,7 @@ Wings pulls the image when a server starts. So a server picks up a new image on 
 | `:stable` | Stable releases |
 | `:beta` | What is going into the next stable |
 
-Version tags such as `:v0.2.0-alpha.1` hold a server image at that release. The initial fork export selects this tag; select `:beta` to follow prereleases, or `:stable` after a fork stable release exists. Keep the node/egg generations compatible. Framework/native version [pins](modules/addon-cache.md#version-locks) are separate from image tags.
+The egg defaults to `:stable`, so future stable releases require no egg-export changes. Select `:beta` to follow published releases including prereleases. Version tags such as `:v1.2.3` remain available if you deliberately want to hold one image. Keep the node/egg generations compatible. Framework/native version [pins](modules/addon-cache.md#version-locks) are separate from image tags.
 
 To force a pull on the node:
 

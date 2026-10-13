@@ -4,13 +4,13 @@
 
 ## 1. Run the installer
 
-After fork release `v0.2.0-alpha.1` and its image have been published:
+After a release workflow has successfully published the node assets and image:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/s2script/s2script-cs2-egg/main/scripts/install-node.sh | bash
 ```
 
-Use an interactive SSH terminal on Debian 11+ or Ubuntu 22.04+. The bootstrap downloads the matching release binary/checksum, verifies it, then starts the Go wizard with sudo. No Go or Python is required on the node. It installs missing `lib32gcc-s1` and `lib32stdc++6` through apt: VPK sync runs SteamCMD on the host, so the container runtime alone is insufficient. See [Debian's 32-bit GCC runtime package](https://packages.debian.org/bookworm/lib32gcc-s1). The alpha bootstrap selects `beta` for subsequent node updates.
+Use an interactive SSH terminal on Debian 11+ or Ubuntu 22.04+. The bootstrap downloads the matching release binary/checksum, verifies it, then starts the Go wizard with sudo. No Go or Python is required on the node. It installs `jq` if needed to resolve the release, and missing `lib32gcc-s1` and `lib32stdc++6` through apt: VPK sync runs SteamCMD on the host, so the container runtime alone is insufficient. See [Debian's 32-bit GCC runtime package](https://packages.debian.org/bookworm/lib32gcc-s1). The default installer selects the latest stable release and its `stable` update channel. For beta, pipe the script into `S2NODE_CHANNEL=beta bash`; beta includes the newest stable releases too. For an exact initial release, use `S2NODE_RELEASE=v1.2.3 bash`. Both downloads are pinned to the same resolved tag before checksum verification.
 
 Other distributions are outside the bootstrap's support. Install their equivalent 32-bit runtime, download and verify the matching node release assets, then run `sudo ./cs2node_linux_amd64 install` directly.
 
@@ -54,6 +54,6 @@ sudo cs2node update
 sudo cs2node uninstall
 ```
 
-The node follows its own `stable`/`beta` channel, independently of the S2Script framework channel. The first fork release is beta. The old independent `s2node` service/config is incompatible; stop it before installing this generation. See [UPSTREAM.md](../UPSTREAM.md).
+The node follows its own `stable`/`beta` channel, independently of the S2Script framework channel. The old independent `s2node` service/config is incompatible; stop it before installing this generation. See [UPSTREAM.md](../UPSTREAM.md).
 
 Uninstall keeps config and shared files. Upstream's `uninstall --purge` also removes config. [Module index](modules/README.md) · [Node config](reference/node-config.md) · [Upgrading](upgrading.md)
