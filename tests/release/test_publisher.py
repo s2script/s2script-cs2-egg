@@ -34,6 +34,34 @@ class PublisherTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     publisher.event()
 
+    def test_event_rejects_noncanonical_tags_before_packaging(self):
+        tags = ("v.0.0.1-alpha.1", "v01.2.3", "v1.2", "v1.2.3-alpha.01",
+                "v1.2.3-", "v1.2.3-alpha..1", "v1.2.3+build", "1.2.3", "v1.2.3-" + "a" * 123)
+        with tempfile.TemporaryDirectory() as d:
+            for tag in tags:
+                with self.subTest(tag=tag):
+                    p = self.event_file(d, release={"id": 1, "draft": False, "prerelease": True, "tag_name": tag})
+                    with patch.dict(os.environ, {"GITHUB_EVENT_PATH": str(p)}):
+                        with self.assertRaisesRegex(RuntimeError, "canonical.*v0.0.1-alpha.1"):
+                            publisher.event()
+
+    def test_event_requires_matching_prerelease_flag(self):
+        with tempfile.TemporaryDirectory() as d:
+            for tag, prerelease in (("v0.0.1-alpha.1", False), ("v1.2.3", True)):
+                with self.subTest(tag=tag):
+                    p = self.event_file(d, release={"id": 1, "draft": False, "prerelease": prerelease, "tag_name": tag})
+                    with patch.dict(os.environ, {"GITHUB_EVENT_PATH": str(p)}):
+                        with self.assertRaisesRegex(RuntimeError, "prerelease"):
+                            publisher.event()
+
+    def test_event_accepts_canonical_stable_and_prerelease_tags(self):
+        with tempfile.TemporaryDirectory() as d:
+            for tag, prerelease in (("v0.0.1-alpha.1", True), ("v1.2.3", False), ("v1.2.3-0.alpha-01", True)):
+                with self.subTest(tag=tag):
+                    p = self.event_file(d, release={"id": 1, "draft": False, "prerelease": prerelease, "tag_name": tag})
+                    with patch.dict(os.environ, {"GITHUB_EVENT_PATH": str(p)}):
+                        self.assertEqual(publisher.event()["tag_name"], tag)
+
     def test_private_source_stops_before_upload_or_registry(self):
         with tempfile.TemporaryDirectory() as d:
             p = self.event_file(d)

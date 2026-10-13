@@ -22,7 +22,7 @@ func repository(t *testing.T) string {
 }
 func TestGeneratedEggAndSchemasCurrent(t *testing.T) {
 	root := repository(t)
-	egg, e := panel.Generate("s2script-cs2-egg:dev")
+	egg, e := panel.Generate(panel.DefaultImage)
 	if e != nil {
 		t.Fatal(e)
 	}

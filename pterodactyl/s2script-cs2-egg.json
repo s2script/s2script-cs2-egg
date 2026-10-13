@@ -9,21 +9,22 @@
   },
   "description": "CS2 with Metamod and S2Script. First start installs app 730, checks all installed plugins, and supervises readiness/lifecycle notifications.",
   "docker_images": {
-    "S2Script runtime": "s2script-cs2-egg:dev"
+    "S2Script prerelease": "ghcr.io/s2script/s2script-cs2-egg:prerelease",
+    "S2Script stable": "ghcr.io/s2script/s2script-cs2-egg:stable"
   },
   "exported_at": "2026-10-11T00:00:00+00:00",
   "features": [],
   "file_denylist": [],
   "meta": {
-    "update_url": "",
+    "update_url": "https://raw.githubusercontent.com/s2script/s2script-cs2-egg/main/pterodactyl/s2script-cs2-egg.json",
     "version": "PTDL_v2"
   },
   "name": "S2Script CS2 (standalone)",
   "scripts": {
     "installation": {
-      "container": "s2script-cs2-egg:dev",
+      "container": "ghcr.io/pterodactyl/installers:debian",
       "entrypoint": "sh",
-      "script": "#!/bin/sh\nset -eu\nprintf '%s\\n' 'First start installs CS2 app 730 and the selected Metamod/S2Script stack in the persistent server root. Ensure the configured image is available on the node before starting.'\n"
+      "script": "#!/bin/sh\nset -eu\nprintf '%s\\n' 'First start installs CS2 app 730 and the selected Metamod/S2Script stack in the persistent server root. Start the server to begin installation.'\n"
     }
   },
   "startup": "s2egg run",

@@ -50,9 +50,17 @@ def event():
         raise RuntimeError("Only the canonical repository's release:published event is allowed")
     release = data["release"]
     tag = release["tag_name"]
-    # The Go contract performs canonical SemVer validation during packaging.
-    if not re.fullmatch(r"v[0-9A-Za-z.-]{1,129}", tag) or release["draft"]:
-        raise RuntimeError("Invalid release tag or draft")
+    # Match internal/releasecontract.ParseVersion before running expensive builds.
+    match = re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?", tag)
+    if not match or len(tag) > 129 or any(
+        part.isdigit() and len(part) > 1 and part[0] == "0"
+        for part in (match[4] or "").split(".")
+    ):
+        raise RuntimeError("Release tag must be canonical v-prefixed SemVer, e.g. v0.0.1-alpha.1 (no dot after v, leading zeroes or build metadata)")
+    if release["draft"]:
+        raise RuntimeError("Draft releases cannot be published")
+    if release["prerelease"] != bool(match[4]):
+        raise RuntimeError("Release prerelease flag must match the tag: mark alpha/beta/rc tags as prerelease; leave stable versions unchecked")
     if not isinstance(release["id"], int) or release["id"] <= 0:
         raise RuntimeError("Invalid release ID")
     return release
