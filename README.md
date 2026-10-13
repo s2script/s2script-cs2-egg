@@ -76,7 +76,7 @@ On an **Ubuntu/Debian amd64 Wings node** with `curl`, Python 3.10+ and healthy
 Wings/Docker, stop your test server and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/s2script/s2script-cs2-egg/main/scripts/setup-node.py | sudo python3 -
+curl -fsSL https://raw.githubusercontent.com/s2script/s2script-cs2-egg/2b4505e3acda45c2391ca2f81c4ead36b959479f/scripts/setup-node.py | sudo python3 -
 ```
 
 The wizard discovers servers, asks for allocations/release, installs s2node and

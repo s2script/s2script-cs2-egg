@@ -26,7 +26,7 @@ never the host's IP. The wizard leaves Docker networking and allocations alone.
 Copy this one command into the node's SSH terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/s2script/s2script-cs2-egg/main/scripts/setup-node.py | sudo python3 -
+curl -fsSL https://raw.githubusercontent.com/s2script/s2script-cs2-egg/2b4505e3acda45c2391ca2f81c4ead36b959479f/scripts/setup-node.py | sudo python3 -
 ```
 
 The wizard reads prompts from your terminal, so piping the download does not
@@ -52,7 +52,7 @@ does not apply the plan. The wizard:
 To inspect/download the script before running, or review the plan without edits:
 
 ```bash
-curl -fL https://raw.githubusercontent.com/s2script/s2script-cs2-egg/main/scripts/setup-node.py -o setup-node.py
+curl -fL https://raw.githubusercontent.com/s2script/s2script-cs2-egg/2b4505e3acda45c2391ca2f81c4ead36b959479f/scripts/setup-node.py -o setup-node.py
 sudo python3 setup-node.py --dry-run
 sudo python3 setup-node.py
 ```
