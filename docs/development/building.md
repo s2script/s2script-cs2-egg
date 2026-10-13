@@ -52,12 +52,12 @@ ssh game2 'sudo cs2node install --channel dev'
 ## Releases
 
 ```bash
-./scripts/release.sh              # cut a release for the top CHANGELOG.md entry
-./scripts/release.sh --prerelease # mark it beta
-./scripts/release.sh --dry-run    # preview the version/notes, touch nothing
+./scripts/release.sh v1.2.3                       # stable
+./scripts/release.sh v1.3.0-rc.1 --prerelease       # beta
+./scripts/release.sh v1.2.3 --dry-run              # preview, touch nothing
 ```
 
-`release.sh` reads the version from the top `## [X.Y.Z]` entry of `CHANGELOG.md`, builds `cs2node` locally as a fail-fast smoke test (never uploaded), and publishes a GitHub Release for `vX.Y.Z` targeting the current commit, with no assets attached. Publishing that release is what builds the real binary: `release.yml` triggers on it, is the only thing that ever uploads `cs2node_linux_amd64` and `checksums.txt`, and runs the download-and-verify round trip below. There is no release branch: the commit you released from is what gets built, and the release's own prerelease flag decides the channel.
+Publish a release directly in GitHub with the desired `vX.Y.Z` tag, or use the optional `release.sh` helper above. The helper accepts the tag explicitly, builds a local node smoke binary with that version, and creates a release at HEAD with automatically generated notes. Neither route reads or edits `VERSION` or requires a changelog entry. Publishing triggers `release.yml`, which builds the node assets and SteamRT3 image from the tagged commit. The tag supplies the embedded version; the release's prerelease flag chooses the channel.
 
 | The release is | Channel | Who installs it |
 |---|---|---|
@@ -66,7 +66,7 @@ ssh game2 'sudo cs2node install --channel dev'
 
 A tag that looks like a prerelease (`v2.1.0-rc1`) but is not marked as one fails the build rather than installing itself on every stable node.
 
-Update `VERSION` and the latest changelog entry before tagging. The release workflow refuses a tag that disagrees with `VERSION`, builds the node assets and SteamRT3 image from that exact commit, and advances a channel only for its newest release. Rebuilding an older release leaves newer channel aliases untouched.
+`VERSION` is only a fallback for local development builds. The release tag overrides it for both binaries and the image. Installer/egg defaults follow release channels, so releases require no per-version file edits. Rebuilding an older release leaves newer channel aliases untouched; beta follows new stable releases as well as prereleases.
 
 The daemon's self-updater downloads both files, verifies the SHA-256 and only then swaps the binary. Both come straight from GitHub over TLS: the addon downloader's community mirrors are deliberately not used here, because a mirror that serves the binary can serve a `checksums.txt` to match it.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Derive release versions from GitHub tags without requiring version/changelog edits.
+- Resolve node installation from stable/beta release metadata and default panel images to channels.
+
 ## [0.2.0-alpha.1] - 2026-10-13
 
 - Base S2Script CS2 Egg on K4ryuu CS2-Egg-Go at 70e8d88.

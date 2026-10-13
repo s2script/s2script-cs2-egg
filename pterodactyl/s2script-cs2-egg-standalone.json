@@ -10,9 +10,8 @@
     "description": "S2Script-focused fork of K4ryuu CS2-Egg-Go: upstream standalone startup and optional automatic node discovery/shared files, plus S2Script plugin management, MultiAddonManager and GameFixes.",
     "features": [],
     "docker_images": {
-        "S2Script CS2 - Fork preview": "ghcr.io/s2script/s2script-cs2-egg:v0.2.0-alpha.1",
-        "S2Script CS2 - Beta": "ghcr.io/s2script/s2script-cs2-egg:beta",
-        "S2Script CS2 - Stable": "ghcr.io/s2script/s2script-cs2-egg:stable"
+        "S2Script CS2 - Stable": "ghcr.io/s2script/s2script-cs2-egg:stable",
+        "S2Script CS2 - Beta": "ghcr.io/s2script/s2script-cs2-egg:beta"
     },
     "file_denylist": [],
     "startup": "./game/cs2.sh {{CUSTOM_PARAMS}} -dedicated +ip 0.0.0.0 -port {{SERVER_PORT}} +map {{SRCDS_MAP}} -maxplayers {{SRCDS_MAXPLAYERS}} +sv_setsteamaccount {{STEAM_ACC}} +game_type {{GAME_TYPE}} +game_mode {{GAME_MODE}}",

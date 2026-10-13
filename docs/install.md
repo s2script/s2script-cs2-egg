@@ -30,7 +30,7 @@ Nothing unusual. Give it the ports you normally would; CS2 needs the game port a
 
 ## 3. Pick the image
 
-Startup tab > **Docker Image**. For the first fork prerelease select `ghcr.io/s2script/s2script-cs2-egg:v0.2.0-alpha.1`; `:stable` applies after a fork stable release exists:
+Startup tab > **Docker Image**. The egg defaults to `:stable`; switch to `:beta` to follow the newest published release including prereleases:
 
 | Image | For |
 |---|---|

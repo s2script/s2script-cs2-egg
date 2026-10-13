@@ -49,10 +49,7 @@ jobs:
           persist-credentials: false
       - name: Validate checked-out source
         id: source
-        env:
-          VERSION: ${{ steps.rel.outputs.version }}
         run: |
-          test "$(cat VERSION)" = "$VERSION"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -65,7 +62,7 @@ jobs:
           COMMIT: ${{ steps.source.outputs.commit }}
         run: |
           set -euo pipefail
-          make node
+          make node VERSION="$VERSION" CHANNEL="$CHANNEL" COMMIT="$COMMIT"
           mkdir -p dist/release
           cp dist/cs2node dist/release/cs2node_linux_amd64
           cp LICENSE NOTICE UPSTREAM.md dist/release/
@@ -129,15 +126,21 @@ jobs:
           CHANNEL: ${{ needs.node.outputs.channel }}
         run: |
           set -euo pipefail
-          if [ "$CHANNEL" = stable ]; then
-            newest=$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name)
-          else
-            newest=$(gh api "repos/$GH_REPO/releases" --jq '[.[] | select(.draft == false)][0].tag_name')
-          fi
-          if [ "$TAG" != "$newest" ]; then
-            echo "Rebuilt $TAG; leaving $CHANNEL on the newer release $newest."
-            exit 0
-          fi
-          docker buildx imagetools create \
-            --tag "ghcr.io/s2script/s2script-cs2-egg:$CHANNEL" \
-            "ghcr.io/s2script/s2script-cs2-egg:$TAG"
+          channels=("$CHANNEL")
+          # Beta follows published releases, including a newer stable release,
+          # just like the node updater and bootstrap's beta selection.
+          if [ "$CHANNEL" = stable ]; then channels+=(beta); fi
+          for alias in "${channels[@]}"; do
+            if [ "$alias" = stable ]; then
+              newest=$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name)
+            else
+              newest=$(gh api "repos/$GH_REPO/releases" --jq '[.[] | select(.draft == false)][0].tag_name')
+            fi
+            if [ "$TAG" != "$newest" ]; then
+              echo "Rebuilt $TAG; leaving $alias on the newer release $newest."
+              continue
+            fi
+            docker buildx imagetools create \
+              --tag "ghcr.io/s2script/s2script-cs2-egg:$alias" \
+              "ghcr.io/s2script/s2script-cs2-egg:$TAG"
+          done
