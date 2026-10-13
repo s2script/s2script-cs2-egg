@@ -1,5 +1,9 @@
 # Optional node core
 
+**Installing your first node? Start with [Node setup](node-setup.md).** It gives
+an interactive provisioning wizard, expected results and the Pelican mount steps for the
+recommended symlink mode. This page is the detailed configuration/API reference.
+
 The Linux x86-64 `s2node` daemon is optional. The ordinary Pterodactyl or Pelican egg starts without it. The core provides socket-bound identity, typed capability negotiation, runtime status reports, optional-module lifecycle, and durable webhook ownership. Shared generation preparation, update scheduling, verified artifact caching and workshop sharing are optional registered modules; see [cache and workshop](workshop.md) for source/trust policy and provisioning. The core advertises only capabilities provided by registered implementations. No Docker socket or Wings administrator credential enters the game container.
 
 ## Build, stage and configure
@@ -8,9 +12,15 @@ Run `make build` to build `bin/s2egg` and `bin/s2node` from the same licensed so
 
 Copy [examples/node.json](../examples/node.json) to a private `/etc/s2node/node.json`, replacing the node ID, panel server IDs, absolute volume paths, actual host-visible container UIDs, access GIDs and allocated IP/ports. The default administrator socket is `/run/s2node/admin.sock`; tests and custom installations may set another absolute private path. Configuration rejects unknown fields, overlapping server volumes, overlapping node-private paths, duplicate IDs/allocations, symlinked volume/egg directories and invalid app-independent allocation data. Node/game protocol preparation is fixed to CS2 app 730. Volume and `egg` directories must already exist.
 
-Provision a dedicated unprivileged `s2node` account. Give that account only traversal access to each configured volume and write access to its `egg` directory, using a dedicated group or a narrow directory ACL. Put both the daemon and relevant container process in the configured `access_gid` group. A group-writable, setgid `egg` directory is useful, but its parent traversal permissions must also permit the daemon. The daemon must itself belong to every configured socket group; it cannot assign arbitrary groups. Avoid broad writable access to all server files.
+Provision a dedicated unprivileged `s2node` account. Give that account read/search access to each configured volume and its ancestors, and write access to its `egg` directory, using a dedicated group or a narrow directory ACL. Directory pinning opens every component with `O_RDONLY`, so traversal-only ACLs are insufficient. This does not require access to private mode-0600 files. Put both the daemon and relevant container process in the configured `access_gid` group. The daemon must itself belong to every configured socket group; it cannot assign arbitrary groups. Avoid broad writable access to all server files.
 
-Review [deploy/s2node.service](../deploy/s2node.service). It runs as `s2node`, with no Linux capabilities or privilege escalation. Add an operator drop-in containing the required `SupplementaryGroups=` and `ReadWritePaths=` entries for the registered **egg directories only**. `ProtectHome=yes` intentionally blocks volumes under home directories; relocating volumes or narrowly reviewing a deployment-specific sandbox exception is an operator decision. Systemd creates private `/run/s2node` and `/var/lib/s2node` directories. No privileged optional module is bundled. Future privileged helpers require their own documented minimal capabilities; in-process modules are trusted code, not a security sandbox.
+Review [deploy/s2node.service](../deploy/s2node.service). It runs as `s2node`, with no Linux capabilities or privilege escalation. Add an operator drop-in containing the required `SupplementaryGroups=` and `ReadWritePaths=` entries for registered **egg directories**, plus explicitly enabled module stores such as `/srv/s2node/shared` for its locks/reference metadata. Do not make whole game volumes writable to the daemon. `ProtectHome=yes` intentionally blocks volumes under home directories; relocating volumes or narrowly reviewing a deployment-specific sandbox exception is an operator decision. Systemd creates private `/run/s2node` and `/var/lib/s2node` directories. No privileged optional module is bundled. Future privileged helpers require their own documented minimal capabilities; in-process modules are trusted code, not a security sandbox.
+
+Wings' recursive ownership repair can change the daemon-owned server sockets.
+For this mixed-UID setup, explicitly provision ownership and set
+`system.check_permissions_on_boot: false` on the sharing node; see the
+[manual walkthrough](node-setup-manual.md#8-allow-the-read-only-mount-and-preserve-socket-ownership).
+Reinstalls and other recursive chown operations also need ownership review.
 
 Before enabling the reviewed unit, run as its service identity:
 

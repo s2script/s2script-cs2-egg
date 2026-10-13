@@ -7,14 +7,14 @@ CS2 server tooling for Linux amd64, Pterodactyl and Pelican, built around **Meta
 [![Panels: Pterodactyl + Pelican](https://img.shields.io/badge/panels-Pterodactyl%20%2B%20Pelican-2496ED?style=flat-square)](docs/install.md#pterodactyl-or-pelican)
 [![Framework: S2Script](https://img.shields.io/badge/framework-S2Script-2EA043?style=flat-square)](docs/frameworks.md)
 
-**[Install](docs/install.md)** · **[Releases](https://github.com/s2script/s2script-cs2-egg/releases)** · **[Configuration](docs/configuration.md)** · **[Documentation](#documentation)**
+**[Install a server](docs/install.md)** · **[Set up shared files on a node](docs/node-setup.md)** · **[Releases](https://github.com/s2script/s2script-cs2-egg/releases)** · **[Documentation](#documentation)**
 
 This is an initial alpha implementation. Automated fixtures and CI image checks
 cover the runtime and optional node services. Live CS2, panel, HUD and firewall
 acceptance remains unverified; see the [acceptance record](docs/acceptance.md).
 Panel installation uses the egg URL below and published GHCR images. The image
-channel becomes usable after a release's **public-verification** job succeeds;
-the first alpha publication is still pending. [Source builds](docs/install.md#build-from-source)
+channel becomes usable after a release's **public-verification** job succeeds.
+[Source builds](docs/install.md#build-from-source)
 remain available for development.
 
 ## Features
@@ -67,20 +67,36 @@ query. Verify native plugins separately with `meta list` and actual gameplay.
 
 ## Optional node service
 
-The egg works standalone. Add [s2node](docs/node.md) when several servers need
+The egg works standalone. Add **s2node** when several servers need
 shared storage, coordinated updates or host operations. Each module is opt-in;
 host credentials remain outside game containers. Communication uses private
 Unix sockets and explicit peer identities.
 
-Start with [shared files](docs/shared-files.md) and [updates](docs/updates.md),
-then enable only the modules you need. Node installation stages reviewable
-service files; it does not silently enable services or alter your firewall.
+On an **Ubuntu/Debian amd64 Wings node** with `curl`, Python 3.10+ and healthy
+Wings/Docker, stop your test server and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/s2script/s2script-cs2-egg/2b4505e3acda45c2391ca2f81c4ead36b959479f/scripts/setup-node.py | sudo python3 -
+```
+
+The wizard discovers servers, asks for allocations/release, installs s2node and
+host SteamCMD, prepares permissions/configuration, and starts an optional
+background CS2 build. It shows a summary before applying changes and preserves
+existing settings with private backups. You finish by attaching the **read-only
+mount** in the panel, then start one server after the build succeeds.
+
+Follow the **[short node setup guide](docs/node-setup.md)** for prompts, the panel
+mount values and checks. Shared files are opt-in and local to each node; symlink
+mode shares VPKs while keeping configs/plugins private. A partial standalone
+download can switch without finishing first. For custom layouts, use the
+[manual setup](docs/node-setup-manual.md) and [node reference](docs/node.md).
 
 ## Documentation
 
 | Need | Guide |
 | --- | --- |
 | Install, panel import, debug image | [Installation](docs/install.md) |
+| Install the node and switch to shared CS2 files | [Node setup walkthrough](docs/node-setup.md) |
 | Settings and precedence | [Configuration](docs/configuration.md) |
 | Plugin inventory, pins and disabled state | [Plugins](docs/plugins.md) · [18 default controls](docs/bundled-plugins.md) |
 | Metamod, S2Script and optional HUD | [Frameworks](docs/frameworks.md) |
