@@ -14,7 +14,7 @@ func TestSharedMarkerForbidsStandaloneSteam(t *testing.T) {
 	if e := os.WriteFile(filepath.Join(root, ".s2shared.json"), []byte(`{}`), 0600); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := prepareSteam(context.Background(), config.Server{Root: root}, t.TempDir()); e == nil {
+	if _, e := prepareSteam(context.Background(), config.Server{Root: root}, t.TempDir(), nil); e == nil {
 		t.Fatal("shared tree entered standalone preparation")
 	}
 	if _, e := os.Stat(filepath.Join(root, "steamcmd")); !os.IsNotExist(e) {

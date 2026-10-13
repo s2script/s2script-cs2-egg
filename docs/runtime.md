@@ -30,6 +30,17 @@ After initialization/update, SDK64 must exist and is copied to `<root>/.steam/sd
 
 ## Launch, console and shutdown
 
+The launcher prints its version before validating `run`/`prepare` configuration.
+Preparation reports its current stage and streams SteamCMD bootstrap/update
+output to the console with credential redaction and reserved readiness-marker
+filtering. SteamCMD nonzero exits include the exit code. These preparation lines
+are console diagnostics; they are not game `server.console` events.
+
+The default game bind is `0.0.0.0`, independent of the panel's external
+`SERVER_IP`. `SERVER_PORT` selects the allocated port. Explicit local-interface
+binding uses `S2EGG_BIND_IP` or JSON `launch.ip`; readiness probes use loopback
+when the bind is unspecified.
+
 Runtime invokes Valve's installed `<root>/game/cs2.sh` directly with an argument vector and cwd `<root>/game`, HOME `<root>`. The wrapper owns CS2's library/runtime setup. There is no constructed shell command or guessed `LD_LIBRARY_PATH`. It receives dedicated/console/usercon, configured IP/port/player limit, game type/mode/map, literal custom arguments and the configured GSLT. GSLT and webhook environment variables are removed from the child environment. Inherited GAME_DEBUGGER/GDB_DEBUG_PORT are also removed. The validated default-off launch.debug_port (GDB_DEBUG_PORT) can set the fixed GAME_DEBUGGER wrapper only when gdbserver exists; readiness still waits for A2S and expires normally while waiting for debugger attachment. See [debug allocation/access guidance](install.md#opt-in-remote-debugging).
 
 Case-insensitive custom `-ip`, `+ip`, `-port`, `+port`, `-hostport`, `+hostport`, `-sv_setsteamaccount`, and `+sv_setsteamaccount`, including `=value` forms, are rejected before preparation. Other custom arguments remain literal; this does not restrict legitimate `exec`/configuration use. Operator commands/configuration can still change engine behavior, so local-query association is evidence rather than protection against arbitrary operator changes.

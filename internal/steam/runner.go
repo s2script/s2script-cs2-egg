@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -78,7 +79,11 @@ func command(ctx context.Context, executable string, args []string, log io.Write
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, errors.New("SteamCMD failed")
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
+			return nil, fmt.Errorf("SteamCMD failed (exit code %d)", exitErr.ExitCode())
+		}
+		return nil, errors.New("SteamCMD could not start or finish; check its executable and console output")
 	}
 	if output.overflow {
 		return nil, errors.New("SteamCMD output exceeded limit")
@@ -105,8 +110,8 @@ func Update(ctx context.Context, executable, root string, validate bool, log io.
 }
 
 // Bootstrap initializes an image-provided SteamCMD in writable persistent state.
-func Bootstrap(ctx context.Context, executable, root string) error {
-	_, err := command(ctx, executable, []string{"+quit"}, nil, root)
+func Bootstrap(ctx context.Context, executable, root string, log io.Writer) error {
+	_, err := command(ctx, executable, []string{"+quit"}, log, root)
 	return err
 }
 

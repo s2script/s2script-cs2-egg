@@ -78,6 +78,20 @@ func homeEnv(root string) []string {
 // caller's descriptor remains untouched. Sink must honor Publish cancellation.
 // Linux child-subreaper mode is process-wide; reaping is restricted to this PGID.
 func Run(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.Reader, stdout, stderr io.Writer, options Options) (int, error) {
+	// Preparation and asynchronous event diagnostics may share an output sink.
+	var ioMu sync.Mutex
+	if options.PreparationLog == nil {
+		options.PreparationLog = stdout
+	}
+	if options.PreparationLog != nil {
+		options.PreparationLog = &lockedWriter{mu: &ioMu, w: options.PreparationLog}
+	}
+	if stdout != nil {
+		stdout = &lockedWriter{mu: &ioMu, w: stdout}
+	}
+	if stderr != nil {
+		stderr = &lockedWriter{mu: &ioMu, w: stderr}
+	}
 	o := runOptions{prepare: func(ctx context.Context, cfg config.Server, emit emitFunc) (map[string]string, error) {
 		return prepareRuntimeOptions(ctx, cfg, emit, options)
 	}, consoleGuard: options.ConsoleGuard, control: options.ControlProvider, poll: time.Duration(cfg.Readiness.PollIntervalSeconds) * time.Second, timeout: time.Duration(cfg.Readiness.TimeoutSeconds) * time.Second, shutdown: 10 * time.Second}
@@ -196,7 +210,7 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 	}
 	state.update(func(s *Status) { s.Versions = safeVersions; s.State = "starting" })
 	// Reject an already-bound allocation before launch; never accept its A2S reply
-	// as readiness for this child. The address queried is the configured allocation.
+	// as readiness for this child. Unspecified binds are queried over loopback.
 	address := net.JoinHostPort(cfg.Launch.IP, itoa(cfg.Launch.Port))
 	probeAddress := address
 	if ip := net.ParseIP(cfg.Launch.IP); ip != nil && ip.IsUnspecified() {
@@ -211,6 +225,9 @@ func runWith(ctx context.Context, cfg config.Server, sink events.Sink, stdin io.
 		return fail("allocation_unavailable", errors.New("game allocation is already bound or unavailable"))
 	}
 	port.Close()
+	if stdout != nil {
+		fmt.Fprintf(stdout, "Starting CS2 on %s; waiting for an A2S readiness response...\n", address)
+	}
 	if e = processgroup.EnableReaping(); e != nil {
 		return fail("spawn_failed", errors.New("cannot enable child reaping"))
 	}

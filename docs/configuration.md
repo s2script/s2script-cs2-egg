@@ -53,7 +53,7 @@ This example explicitly opts into tokenless mode for local diagnostics and disab
 | Environment variable | JSON field | Default / validation |
 | --- | --- | --- |
 | `SERVER_ID` | `identity` | Empty; optional operator identity; otherwise runtime persists a standalone identity in `egg/server-id` |
-| `SERVER_IP` | `launch.ip` | `0.0.0.0`; IPv4/IPv6 address; panel allocation value |
+| `S2EGG_BIND_IP` | `launch.ip` | `0.0.0.0`; optional explicit container-local IPv4/IPv6 bind address |
 | `SERVER_PORT` | `launch.port` | `27015`; integer 1–65535; panel allocation value |
 | `SRCDS_APPID` | `steam.appid` | `730`; immutable CS2 app ID |
 | `SRCDS_MAP` | `launch.map` | `de_dust2`; nonempty map name |
@@ -73,6 +73,13 @@ This example explicitly opts into tokenless mode for local diagnostics and disab
 | `GDB_DEBUG_PORT` | `launch.debug_port` | `0` disables; integer 1–65535 distinct from game port; requires debug image and restricted allocated TCP access |
 | `DISCORD_WEBHOOK_URL` | `webhook.url` | Empty secret; HTTPS Discord `/api[/vN]/webhooks/<numeric-id>/<token>` URL when configured |
 | `S2SCRIPT_PLUGIN_<NAME>` | `plugins.bundled` | `default`, `0`, or `1`; see [generated plugin controls](bundled-plugins.md) |
+
+`SERVER_IP` is the panel's external allocation and does not override `launch.ip`.
+With Docker bridge networking that address usually belongs to the host, not the
+container. Leave the bind address at `0.0.0.0` for normal panel use; `SERVER_PORT`
+still selects the allocated game port. Direct/host-network operators who formerly
+used `SERVER_IP` to select a local interface must use `S2EGG_BIND_IP` or saved
+`launch.ip` instead. The public allocation and firewall remain panel/node concerns.
 
 Webhook hostnames are restricted to `discord.com`, `discordapp.com`, `canary.discord.com`, and `ptb.discord.com`; credentials, queries, and fragments in URLs are rejected. Readiness timeout accepts 1–3600 seconds; polling accepts 1 second through that timeout. Webhook timeout accepts 1–60 seconds. Additional selectable event names are `server.restart`, `server.update`, `backup`, and `guard`. Queue capacity accepts 1–1024 and max retries accepts 0–10 (defaults 64/2). Lifecycle and operational delivery are implemented by their corresponding enabled modules. See [delivery limits and node ownership](webhooks.md).
 

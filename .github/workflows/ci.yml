@@ -85,3 +85,23 @@ jobs:
           if [ "$TARGET" = debug ]; then
             docker run --rm --entrypoint /bin/sh "$IMAGE" -ec 'command -v gdbserver; command -v gdb'
           fi
+      - name: Check panel startup command and container bind (no game download)
+        env:
+          IMAGE: s2script-cs2-egg:ci-${{ matrix.target }}
+        run: |
+          # Wings supplies its own UID, a read-only rootfs and a writable volume.
+          # Exercise the image CMD, including an early actionable config failure.
+          status=0
+          docker run --rm --network none --read-only --user 12345:12345 \
+            --tmpfs /home/container:rw,uid=12345,gid=12345,mode=0700 \
+            -e SERVER_IP=203.0.113.10 -e SERVER_PORT=28015 \
+            "$IMAGE" > "$RUNNER_TEMP/panel-startup.log" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/panel-startup.log"
+          test "$status" -eq 1
+          grep -F 'Starting S2Script CS2' "$RUNNER_TEMP/panel-startup.log"
+          grep -F 'STEAM_ACC' "$RUNNER_TEMP/panel-startup.log"
+          docker run --rm --network none --read-only --user 12345:12345 \
+            --tmpfs /home/container:rw,uid=12345,gid=12345,mode=0700 \
+            -e ALLOW_TOKENLESS=1 -e SERVER_IP=203.0.113.10 -e SERVER_PORT=28015 \
+            --entrypoint /usr/local/bin/s2egg "$IMAGE" config show --root /home/container \
+            | jq -e '.launch.ip == "0.0.0.0" and .launch.port == 28015'
