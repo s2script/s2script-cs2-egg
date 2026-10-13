@@ -1,41 +1,39 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
-GO ?= go
-IMAGE ?= ghcr.io/s2script/s2script-cs2-egg:prerelease
+VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
+COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+CHANNEL ?= dev
+BUILT   ?= $(shell date -u +%Y-%m-%dT%H:%MZ)
+LDFLAGS  = -s -w \
+  -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Version=$(VERSION) \
+  -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Channel=$(CHANNEL) \
+  -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Commit=$(COMMIT) \
+  -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Built=$(BUILT)
+GOOS    = linux
+GOARCH  = amd64
 
-.PHONY: build test vet egg egg-check clean
+-include .env.local
 
-build:
-	mkdir -p bin
-	$(GO) build -trimpath -buildvcs=false -o bin/s2egg ./cmd/s2egg
-	$(GO) build -trimpath -buildvcs=false -o bin/s2node ./cmd/s2node
-	$(GO) build -trimpath -buildvcs=false -o bin/egggen ./cmd/egggen
+.PHONY: test vet lint egg node node-dev clean
 
 test:
-	$(GO) test ./...
+	go test ./...
 
 vet:
-	$(GO) vet ./...
+	go vet ./...
+
+lint: vet
+	@command -v staticcheck >/dev/null && staticcheck ./... || echo "staticcheck not installed, vet only"
 
 egg:
-	$(GO) run ./cmd/egggen --image $(IMAGE) --catalog-output docs/bundled-plugins.md
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(LDFLAGS)" -o dist/cs2egg ./cmd/cs2egg
 
-egg-check:
-	$(GO) run ./cmd/egggen --image $(IMAGE) --catalog-output docs/bundled-plugins.md --check
+node:
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(LDFLAGS)" -o dist/cs2node ./cmd/cs2node
+
+# NODE_HOST comes from .env.local (gitignored), e.g. NODE_HOST=game2
+node-dev: node
+	@test -n "$(NODE_HOST)" || { echo "set NODE_HOST in .env.local"; exit 1; }
+	scp dist/cs2node $(NODE_HOST):/usr/local/bin/cs2node.new
+	ssh $(NODE_HOST) 'mv /usr/local/bin/cs2node.new /usr/local/bin/cs2node && chmod +x /usr/local/bin/cs2node && (systemctl restart cs2node 2>/dev/null || true) && cs2node version'
 
 clean:
-	rm -rf bin
-
-# Install tests/schema-requirements.txt in an isolated environment first.
-SCHEMA_PYTHON ?= python3
-.PHONY: schema-check
-schema-check:
-	S2_SCHEMA_PYTHON=$(SCHEMA_PYTHON) $(GO) test ./internal/releasecontract ./internal/server ./internal/node ./internal/selfupdate -run "Schema|BotInterface" -count=1
-
-.PHONY: release-check release
-release-check: egg-check
-	$(GO) test ./internal/releasepack ./tests/integration -count=1
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/release -v
-
-# OUT must be outside this checkout and must not already exist.
-release:
-	$(GO) run ./cmd/releasectl pack --tag $(RELEASE_TAG) --output $(OUT) --go $(GO)
+	rm -rf dist

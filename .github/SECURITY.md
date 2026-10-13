@@ -1,25 +1,34 @@
-# Security
+# Security policy
 
-This initial alpha has not completed production CS2/panel/firewall acceptance.
-Use the latest reviewed prerelease and inspect its acceptance record. No separate
-long-term support branch is currently maintained.
+## Reporting
 
-Do not post exploit details or credentials in public issues. If GitHub private
-vulnerability reporting is enabled, use the repository's Security → Report a
-vulnerability flow. Otherwise contact an organization maintainer privately
-through their published contact method and request a secure reporting channel;
-this project does not invent a monitored security mailbox.
+Do not open a public issue for a vulnerability. Use GitHub's [private reporting form](https://github.com/s2script/s2script-cs2-egg/security/advisories/new). If private reporting is unavailable, contact the S2Script repository maintainers privately.
 
-Include affected commit/version, prerequisites, scope and a minimal reproducer.
-Remove webhook/GSLT/Wings credentials, personal data and dump contents.
+Include what you would want to receive: what you did, what happened, and what an attacker gets out of it. A proof of concept helps, even a rough one.
 
-Trust boundaries include archive/registry data, writable game volumes, console
-output, peer-credential Unix sockets and privileged guard policy. Game containers
-must never receive a Docker socket, Wings administrator credentials, helper
-policy files or the node administrator socket. Keep helpers narrowly scoped and
-host guard opt-in. See [node permissions](../docs/node.md),
-[guard](../docs/guard.md) and [project updates](../docs/project-updates.md).
+Reports are handled by this downstream repository's maintainers. Upstream provenance and notices are recorded in UPSTREAM.md and NOTICE.
 
-Release hashes establish integrity against publisher metadata; they are not an
-independent signing system. Corresponding source, strict compatibility checks
-and retained rollback state accompany node updates.
+## What counts
+
+The interesting boundary is between a server and its node. The daemon runs as root; every server runs as an unprivileged user who can execute arbitrary code inside their own container and write anything into their own volume, including the socket the daemon listens on.
+
+So these are the reports worth sending:
+
+- Anything a container user can do that writes or reads outside their own volume.
+- Anything one server can do to another server's files, traffic or configuration.
+- Anything that gets code or a chosen file onto the node as root.
+- A way to make the daemon fetch from a host it should never fetch from.
+- A way to bypass the checksum verification on a self-update.
+
+The [security model](https://github.com/s2script/s2script-cs2-egg/blob/main/docs/security.md) describes what the daemon already assumes and guards against. If you found a way around one of those guarantees, that is exactly the report to send.
+
+## What does not count
+
+- A server operator changing their own server's configuration. That is their server.
+- Blocking their own players with a rule they configured.
+- Resource use inside their own container.
+- Anything that needs root on the node to begin with.
+
+## Supported versions
+
+The current release on the `stable` channel, and whatever is on `beta`. There are no long term support branches: this is one binary with a self-updater, and staying current is the plan.
