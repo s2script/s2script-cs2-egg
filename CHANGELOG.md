@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Sync the upstream baseline to K4ryuu CS2-Egg-Go v1.0.4 (db6c5f4).
+- Skip unchanged Steam client copies and permission changes during node update checks.
+- Compare Steam client contents so same-size replacements with older timestamps still update.
+- Suppress startup alerts for servers already running when the node daemon starts.
 - Derive release versions from GitHub tags without requiring version/changelog edits.
 - Resolve node installation from stable/beta release metadata and default panel images to channels.
 
@@ -16,6 +20,13 @@
 ## Upstream changelog
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
+
+## [1.0.4] - 2026-10-14
+
+### Fixed
+
+- `cs2node` wrote about 100 MB to disk every minute, a constant 1.6 MB/s. After each CS2 update check, vpksync copied both `steamclient.so` files into the central install and ran a chmod over every file in it, even when nothing had changed. Both now leave files that are already right alone.
+- A daemon restart or self-update posted "Server up" for every server that was already running. Only a server that actually starts while the daemon runs gets one now.
 
 ## [1.0.3] - 2026-10-13
 
