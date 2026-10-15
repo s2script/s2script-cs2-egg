@@ -42,7 +42,7 @@ func (*Module) Questions() []module.Question {
 	return []module.Question{
 		{Key: "mode", Prompt: "Password sharing", Default: d.Mode, Kind: module.Choice, Choices: []module.Option{{Value: "unique", Desc: "each participating server gets a different password"}, {Value: "shared", Desc: "participating servers on this node share one password"}}},
 		{Key: "interval", Prompt: "Password regeneration interval", Default: d.Interval, Kind: module.Choice, Choices: []module.Option{{Value: "daily", Desc: "every 24 hours"}, {Value: "weekly", Desc: "every seven days"}, {Value: "bi-weekly", Desc: "every fourteen days"}, {Value: "monthly", Desc: "every calendar month"}}},
-		{Key: "wordlist", Prompt: "Dictionary file", Default: d.Wordlist, Help: "default is downloaded once with a pinned checksum; custom list requires at least 7776 distinct words"},
+		{Key: "wordlist", Prompt: "Dictionary file", Default: d.Wordlist, Help: "default is downloaded once with a pinned checksum; custom list requires at least 7772 distinct usable words"},
 		{Key: "dir", Prompt: "Private password state directory", Default: d.Dir},
 	}
 }

@@ -25,6 +25,7 @@ const maxWordlist = 4 << 20
 
 var wordPattern = regexp.MustCompile(`^[a-z]{2,16}$`)
 var dicePattern = regexp.MustCompile(`^[1-6]{5}$`)
+var compoundPattern = regexp.MustCompile(`^[a-z]+(-[a-z]+)+$`)
 
 func ValidPassword(s string) bool { return password.Valid(s) }
 
@@ -51,6 +52,11 @@ func ParseWords(r io.Reader) ([]string, error) {
 			w = fields[0]
 		case len(fields) == 2 && dicePattern.MatchString(fields[0]):
 			w = fields[1]
+			// EFF includes four hyphenated compounds. Exclude them so each
+			// generated phrase still has exactly three simple word components.
+			if len(w) <= 16 && compoundPattern.MatchString(w) {
+				continue
+			}
 		default:
 			return nil, errors.New("invalid wordlist line")
 		}
@@ -65,8 +71,8 @@ func ParseWords(r io.Reader) ([]string, error) {
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
-	if len(words) < 7776 {
-		return nil, errors.New("wordlist needs at least 7776 distinct words")
+	if len(words) < 7772 {
+		return nil, errors.New("wordlist needs at least 7772 distinct usable words")
 	}
 	return words, nil
 }
