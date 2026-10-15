@@ -3,6 +3,7 @@
 package vpksync
 
 import (
+	"crypto/sha256"
 	"errors"
 	"io"
 	"io/fs"
@@ -395,8 +396,27 @@ func BuildID(dir string) string {
 	return ""
 }
 
-// copyFile is a plain copy for the central dir (root's own, no volume).
-func copyFile(src, dst string) error {
+// CopyChanged is a plain copy for the central dir (root's own, no volume).
+// Equal contents are left alone. SteamCMD can preserve package timestamps,
+// so size and mtime alone cannot identify an unchanged client binary.
+func CopyChanged(src, dst string) error {
+	si, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if di, err := os.Stat(dst); err == nil && di.Size() == si.Size() {
+		srcSum, err := fileDigest(src)
+		if err != nil {
+			return err
+		}
+		dstSum, err := fileDigest(dst)
+		if err != nil {
+			return err
+		}
+		if srcSum == dstSum {
+			return nil
+		}
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -414,4 +434,19 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+func fileDigest(path string) ([sha256.Size]byte, error) {
+	var sum [sha256.Size]byte
+	f, err := os.Open(path)
+	if err != nil {
+		return sum, err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return sum, err
+	}
+	copy(sum[:], h.Sum(nil))
+	return sum, nil
 }

@@ -1,7 +1,7 @@
 S2Script CS2 Egg is a downstream fork of CS2-Egg-Go.
 
 Upstream: https://github.com/K4ryuu/CS2-Egg-Go
-Baseline: 70e8d88bb5838d36d82e14a7f397ee1210a2ebc5
+Baseline: db6c5f453c7806bf356bac8d87f2061c3be07085 (v1.0.4)
 Copyright (C) 2024-2026 Kőrösfalvi "K4ryuu" Martin.
 Copyright (C) 2026 S2Script CS2 Egg contributors.
 

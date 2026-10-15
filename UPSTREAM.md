@@ -1,8 +1,8 @@
 # Maintaining this fork
 
 This project uses [K4ryuu/CS2-Egg-Go](https://github.com/K4ryuu/CS2-Egg-Go) as its
-implementation base. The imported baseline is
-`70e8d88bb5838d36d82e14a7f397ee1210a2ebc5` (2026-10-13). The former independent
+implementation base. The imported baseline is release **v1.0.4**,
+`db6c5f453c7806bf356bac8d87f2061c3be07085` (2026-10-14). The former independent
 implementation remains in repository history through
 `ed8a8e7098ed985cd142fba57d844269b0e70796`.
 
@@ -20,6 +20,9 @@ source does not change GitHub's repository-network/fork badge.
 - S2Script panel exports, branding, images, release publishing and self-update URL.
 - A small bootstrap downloads/verifies the node binary and runs the upstream Go
   wizard. It is not a separate Python provisioning implementation.
+- The v1.0.4 Steam client copy optimization compares same-size files by SHA-256
+  instead of timestamps, so replacements with preserved or older timestamps are
+  installed. Unchanged clients are read for comparison but not rewritten.
 
 ## Updating the baseline
 
@@ -31,7 +34,7 @@ Record the new baseline here and in NOTICE. Retain copyright and licence notices
 ```bash
 git remote add upstream https://github.com/K4ryuu/CS2-Egg-Go.git
 git fetch upstream main
-git diff 70e8d88bb5838d36d82e14a7f397ee1210a2ebc5 upstream/main
+git diff db6c5f453c7806bf356bac8d87f2061c3be07085 upstream/main
 make test vet egg node
 go test -race ./tests/...
 ```
