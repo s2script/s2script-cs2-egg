@@ -147,3 +147,15 @@ Every module checks its own section when the daemon starts. A bad value is a sta
 ---
 
 [Docs index](../README.md)
+
+## passwords
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Node master switch; each server also needs `ENABLE_ROTATING_PASSWORD=1` |
+| `mode` | `unique` | `unique` per server, or `shared` across participating servers on this node |
+| `interval` | `monthly` | `daily`, `weekly`, `bi-weekly` (14 days), `monthly` |
+| `dir` | `/var/lib/cs2node/passwords` | Private assignment state |
+| `wordlist` | `/var/lib/cs2node/passwords/words.txt` | Separate dictionary; default downloaded once and checksum-verified |
+
+[Password setup, interval semantics and Discord delivery](../modules/passwords.md).

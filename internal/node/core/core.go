@@ -79,6 +79,14 @@ func (c *Core) setEgg(container string, h proto.Hello) {
 	}
 }
 
+// PasswordOptIn is taken from this server's hello, never from a target id in a request.
+func (c *Core) PasswordOptIn(container string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.containers[container]
+	return ok && e.egg.RotatingPassword
+}
+
 // Notice is a fact one module publishes for others (alerts, crashes,
 // metrics) without knowing who listens.
 type Notice struct {
@@ -92,17 +100,18 @@ type Notice struct {
 // Notice kinds. Every publisher uses one of these, so a listener (and the
 // alerts wizard) can enumerate them.
 const (
-	NoticeServerStart     = "server.start"     // container up
-	NoticeServerStop      = "server.stop"      // container gone
-	NoticeCrash           = "crash"            // exit_code, map, players
-	NoticeCS2Update       = "cs2.update"       // from, to
-	NoticePushFailed      = "push.failed"      // err
-	NoticeRestartDeferred = "restart.deferred" // until, reason
-	NoticeGuardBlock      = "guard.block"      // ip, minutes, rule, why
-	NoticeNodeUpdate      = "node.update"      // from, to
-	NoticeBackupDone      = "backup.done"      // path, bytes
-	NoticeBackupFailed    = "backup.failed"    // err
-	NoticeCleanupDone     = "cleanup.done"     // files, bytes
+	NoticePasswordGenerated = "password.generated"
+	NoticeServerStart       = "server.start"     // container up
+	NoticeServerStop        = "server.stop"      // container gone
+	NoticeCrash             = "crash"            // exit_code, map, players
+	NoticeCS2Update         = "cs2.update"       // from, to
+	NoticePushFailed        = "push.failed"      // err
+	NoticeRestartDeferred   = "restart.deferred" // until, reason
+	NoticeGuardBlock        = "guard.block"      // ip, minutes, rule, why
+	NoticeNodeUpdate        = "node.update"      // from, to
+	NoticeBackupDone        = "backup.done"      // path, bytes
+	NoticeBackupFailed      = "backup.failed"    // err
+	NoticeCleanupDone       = "cleanup.done"     // files, bytes
 )
 
 // NoticeKinds lists every kind with its one-line meaning, in display order.

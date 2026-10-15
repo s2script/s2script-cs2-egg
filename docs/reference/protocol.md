@@ -57,6 +57,7 @@ From the egg:
 
 | Type | Carries |
 |---|---|
+| `password.query` | Requests the current socket server's password assignment; carries no target id |
 | `hello` | Egg version, build stamp, boot id, whether the bot guard is on and in which mode |
 | `guard.hit` | A rule tripped: address, rule, ban length, client id |
 | `guard.ev` | A client joined, left or chatted. The node's heuristics run on these |
@@ -69,6 +70,7 @@ From the node:
 
 | Type | Carries |
 |---|---|
+| `password.update` | Assigned password, next regeneration time, or a generic error; only for opted-in eggs |
 | `hello` | Node version and the list of enabled modules |
 | `vpk.status` | `queued` with a position, `updating`, `verifying`, `pushing`, `done` or `failed` |
 | `guard.block` | An address was dropped for this server: address, minutes, rule, whether it was a dry run |
@@ -97,3 +99,6 @@ If the daemon restarts, the egg reconnects on its own and re-sends its state.
 ---
 
 [Docs index](../README.md)
+
+The egg hello carries `rotating_password` (default false). The node uses the
+socket identity and this opt-in to gate password queries. Old eggs never opt in.

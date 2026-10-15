@@ -508,6 +508,16 @@
             "user_editable": true,
             "rules": "required|string|in:default,0,1",
             "field_type": "text"
+        },
+        {
+            "name": "Rotating Join Password",
+            "description": "Opt into node-managed three-word join passwords. Requires the node passwords module. Restart after changing. The node controls sharing and daily/weekly/bi-weekly/monthly regeneration.",
+            "env_variable": "ENABLE_ROTATING_PASSWORD",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
         }
     ],
     "uuid": "41d302c7-9f36-48b3-9ed3-70569007949f"

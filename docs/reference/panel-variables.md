@@ -70,3 +70,13 @@ Attach with IDA: Debugger > Remote GDB debugger, or `gdb` with `target remote <i
 ---
 
 [Docs index](../README.md)
+
+## Rotating join passwords
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ENABLE_ROTATING_PASSWORD` | `0` | Opt this server into the node's passwords module; restart after changing |
+
+The node controls shared/unique mode and regeneration interval. See
+[rotating passwords](../modules/passwords.md), including initial-enrollment and
+node-outage behavior.

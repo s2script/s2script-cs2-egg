@@ -50,6 +50,9 @@ type Option struct {
 // The installer prints these right after the module's questions.
 type Noter interface{ Notes() []string }
 
+// DefaultEnabler overrides the installer's fresh-install enabled default.
+type DefaultEnabler interface{ DefaultEnabled() bool }
+
 // Seeder is a module with config keys the wizard does not ask about but
 // that belong in the file anyway, so the operator can see and edit them.
 // Existing values always win; seeding only fills what is missing.

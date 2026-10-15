@@ -39,3 +39,10 @@ Notices that arrive within three seconds go out as one message, so a CS2 update 
 ---
 
 [Docs index](../README.md)
+
+## Generated passwords
+
+The [passwords module](passwords.md) uses this enabled webhook for first-generation
+and regeneration messages containing the actual credential. These deliveries
+have persisted retries and are independent of the ordinary `events` filter; use a
+private channel. Their pending count appears under the passwords module status.

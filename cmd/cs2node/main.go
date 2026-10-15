@@ -33,6 +33,7 @@ import (
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/metrics"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/module"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/nodeconfig"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/node/passwords"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/ui"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/update"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/vpksync"
@@ -82,6 +83,8 @@ func usage() {
 	cmd("backups [server]", "backups on disk: when, files, size")
 	cmd("backup now [server]", "back up every running server (or one) right now")
 	cmd("restore <server> [#]", "unpack a backup over a stopped server's volume (--yes, --volume)")
+	group("Join passwords  (module passwords):")
+	cmd("passwords show <server>", "reveal the current password (full server UUID; shared accepts any id)")
 	group("Cleanup  (module cleanup):")
 	cmd("cleanup [server]", "what the cleanup passes removed, per server and per rule")
 	cmd("cleanup now [server]", "run a cleanup pass over every running server (or one) right now")
@@ -95,7 +98,7 @@ func allModules(log *slog.Logger) []module.Module {
 	// in a sensible shape rather than two that drift
 	return []module.Module{
 		vpksync.New(log, client), guard.New(log), alerts.New(log, client), addoncache.New(log, client),
-		workshop.New(log, client), backup.New(log), nodecleanup.New(log), crashes.New(log), consolelog.New(log), metrics.New(log),
+		workshop.New(log, client), backup.New(log), nodecleanup.New(log), crashes.New(log), consolelog.New(log), metrics.New(log), passwords.New(log, client),
 	}
 }
 
@@ -163,6 +166,8 @@ func main() {
 		err = runPinCommand(os.Args[1], os.Args[2:])
 	case "workshop":
 		err = runWorkshopCommand(log, os.Args[2:])
+	case "passwords":
+		err = passwords.Command(os.Stdout, nodeconfig.DefaultPath, os.Args[2:])
 	case "cleanup":
 		err = runCleanupCommand(log, os.Args[2:])
 	case "backups", "backup", "restore":
