@@ -44,8 +44,10 @@ at `/var/lib/cs2node/passwords/words.txt`, independently of the Go source. Norma
 rotation needs no internet access.
 
 Set `wordlist` to use your own absolute path. Use one lowercase ASCII word per
-line, or EFF's dice-number and word format. At least 7,776 distinct words of
-2–16 letters are required; duplicates do not increase the count. Restart the
+line, or EFF's dice-number and word format. At least 7,772 distinct words of
+2–16 letters are required; duplicates do not increase the count. Hyphenated
+compounds in dice-number rows are skipped (four in the pinned EFF list), so
+passwords always contain three simple words. Restart the
 daemon after fixing an initially missing default list, or install it manually
 from the documented source. Invalid custom lists prevent regeneration and retain
 the last assignment.
