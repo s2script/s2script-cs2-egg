@@ -20,19 +20,21 @@ const Version = 1
 type Type string
 
 const (
-	TypeHello         Type = "hello"
-	TypeVpkStatus     Type = "vpk.status"
-	TypeGuardBlock    Type = "guard.block"
-	TypeGuardHit      Type = "guard.hit"
-	TypeGuardEvent    Type = "guard.ev"
-	TypeServerState   Type = "server.state"
-	TypeConsoleExec   Type = "console.exec"
-	TypeCrash         Type = "egg.crash"
-	TypeAddonQuery    Type = "addon.query"
-	TypeAddonRelease  Type = "addon.release"
-	TypeWorkshopSync  Type = "workshop.sync"
-	TypeWorkshopReady Type = "workshop.ready"
-	TypeLogLine       Type = "log.line"
+	TypeHello          Type = "hello"
+	TypePasswordQuery  Type = "password.query"
+	TypePasswordUpdate Type = "password.update"
+	TypeVpkStatus      Type = "vpk.status"
+	TypeGuardBlock     Type = "guard.block"
+	TypeGuardHit       Type = "guard.hit"
+	TypeGuardEvent     Type = "guard.ev"
+	TypeServerState    Type = "server.state"
+	TypeConsoleExec    Type = "console.exec"
+	TypeCrash          Type = "egg.crash"
+	TypeAddonQuery     Type = "addon.query"
+	TypeAddonRelease   Type = "addon.release"
+	TypeWorkshopSync   Type = "workshop.sync"
+	TypeWorkshopReady  Type = "workshop.ready"
+	TypeLogLine        Type = "log.line"
 )
 
 // vpk.status states, in the order a push goes through them
@@ -58,12 +60,24 @@ type Message interface{ Type() Type }
 // Hello opens a connection from either side. The node fills Version and
 // Modules, the egg fills Version, BootID and Guard.
 type Hello struct {
-	Version string     `json:"version"`
-	Built   string     `json:"built,omitempty"` // build stamp, so a node can tell an old image
-	Modules []string   `json:"modules,omitempty"`
-	BootID  string     `json:"boot_id,omitempty"`
-	Guard   *GuardInfo `json:"guard,omitempty"`
+	RotatingPassword bool       `json:"rotating_password,omitempty"`
+	Version          string     `json:"version"`
+	Built            string     `json:"built,omitempty"` // build stamp, so a node can tell an old image
+	Modules          []string   `json:"modules,omitempty"`
+	BootID           string     `json:"boot_id,omitempty"`
+	Guard            *GuardInfo `json:"guard,omitempty"`
 }
+
+// PasswordQuery requests only this socket's assignment; no target id is accepted.
+type PasswordQuery struct{}
+type PasswordUpdate struct {
+	Password string `json:"password,omitempty"`
+	NextAt   string `json:"next_at,omitempty"`
+	Err      string `json:"err,omitempty"`
+}
+
+func (*PasswordQuery) Type() Type  { return TypePasswordQuery }
+func (*PasswordUpdate) Type() Type { return TypePasswordUpdate }
 
 // GuardInfo is the egg guard's mode, so the node knows whether kicks land.
 type GuardInfo struct {
@@ -236,6 +250,10 @@ func Decode(line []byte) (Message, error) {
 	}
 	var m Message
 	switch env.T {
+	case TypePasswordQuery:
+		m = &PasswordQuery{}
+	case TypePasswordUpdate:
+		m = &PasswordUpdate{}
 	case TypeHello:
 		m = &Hello{}
 	case TypeVpkStatus:

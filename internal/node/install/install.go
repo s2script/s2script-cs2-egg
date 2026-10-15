@@ -186,6 +186,17 @@ func splitList(v string, choices []module.Option) (list []string, bad string) {
 	return list, ""
 }
 
+// Modules with sensitive behavior can opt out of the fresh-install default.
+func moduleEnabledDefault(fresh bool, cfg nodeconfig.Config, m module.Module) bool {
+	if !fresh {
+		return cfg.Enabled(m.Name())
+	}
+	if d, ok := m.(module.DefaultEnabler); ok {
+		return d.DefaultEnabled()
+	}
+	return true
+}
+
 // Run performs the install.
 func Run(opts Options, modules []module.Module) error {
 	if os.Geteuid() != 0 {
@@ -260,7 +271,7 @@ func Run(opts Options, modules []module.Module) error {
 		if raw, ok := cfg.Modules[m.Name()]; ok {
 			json.Unmarshal(raw, &existing)
 		}
-		on := w.yesNo("Enable "+m.Name()+"?", fresh || cfg.Enabled(m.Name()))
+		on := w.yesNo("Enable "+m.Name()+"?", moduleEnabledDefault(fresh, cfg, m))
 		section := map[string]any{"enabled": on}
 		var keys []string
 		if on {

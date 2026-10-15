@@ -230,6 +230,13 @@ func Run(ctx context.Context, env Env) int {
 		return 1
 	}
 
+	passwordManager, err := preparePassword(ctx, env, node, log)
+	if err != nil {
+		log.Log(logx.Error, "Join password setup failed; server will not start without its requested protection")
+		return 1
+	}
+	baseMask := log.Mask
+	log.Mask = func(line string) string { return passwordManager.Mask(baseMask(line)) }
 	pipeline := &console.Pipeline{Log: log, Out: env.Stdout, Mask: log.Mask}
 	if env.flag("ENABLE_FILTER") {
 		pipeline.Filter = console.NewFilter(cfg.Filter.Patterns)
@@ -287,7 +294,12 @@ func Run(ctx context.Context, env Env) int {
 	// picks the map and player count back up without waiting for one
 	w := watch.New(500)
 	sendState := func() { st := w.State(); link.send(&st) }
-	link.onConnect = sendState
+	requestPassword := func() {
+		if env.flag("ENABLE_ROTATING_PASSWORD") && link.hasModule("passwords") {
+			link.send(&proto.PasswordQuery{})
+		}
+	}
+	link.onConnect = func() { sendState(); requestPassword() }
 	sendState()
 	go func() {
 		t := time.NewTicker(StateHeartbeat)
@@ -299,6 +311,7 @@ func Run(ctx context.Context, env Env) int {
 				return
 			case <-t.C:
 				sendState()
+				requestPassword()
 				if nodeSink != nil {
 					if n := nodeSink.Dropped(); n > lastDropped {
 						log.Logf(logx.Warning, "Console log forwarding fell behind, %d line(s) dropped since last check", n-lastDropped)
@@ -332,6 +345,7 @@ func Run(ctx context.Context, env Env) int {
 		log.Log(logx.Input, log.Mask(cmd))
 	}
 	srv.Line = func(line string) {
+		passwordManager.Observe(line, srv.Send)
 		// the ring is what a crash report carries out of the container, so
 		// it holds the masked line: the terminal echoes whatever is typed
 		// into it, and an operator setting rcon_password in the panel
@@ -359,6 +373,14 @@ func Run(ctx context.Context, env Env) int {
 			}
 		case *proto.ConsoleExec:
 			srv.Send(x.Cmd)
+		case *proto.PasswordUpdate:
+			if env.flag("ENABLE_ROTATING_PASSWORD") {
+				if err := passwordManager.Accept(*x); err != nil {
+					log.Log(logx.Warning, "Password update unavailable; retaining the current assignment")
+				} else {
+					passwordManager.Apply(srv.Send)
+				}
+			}
 		}
 	})
 	err = srv.Run(ctx)
@@ -427,7 +449,7 @@ var AddonCacheTimeout = 5 * time.Minute
 var StateHeartbeat = 30 * time.Second
 
 func nodeHello(env Env) proto.Hello {
-	return proto.Hello{BootID: fmt.Sprintf("%d", time.Now().Unix()), Guard: &proto.GuardInfo{Enabled: env.flag("ENABLE_GUARD"), Action: "log"}}
+	return proto.Hello{RotatingPassword: env.flag("ENABLE_ROTATING_PASSWORD"), BootID: fmt.Sprintf("%d", time.Now().Unix()), Guard: &proto.GuardInfo{Enabled: env.flag("ENABLE_GUARD"), Action: "log"}}
 }
 
 // nodeLink holds the node connection for the run and reconnects when the

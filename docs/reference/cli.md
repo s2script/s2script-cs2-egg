@@ -90,3 +90,9 @@ Keys: `q` quits, `s` cycles the sort, arrows and PageUp/PageDown scroll.
 ---
 
 [Docs index](../README.md)
+
+## Join passwords
+
+`sudo cs2node passwords show <full-server-uuid>` explicitly reveals its saved
+password and due date. In shared mode, `show shared` also works. See
+[rotating passwords](../modules/passwords.md).

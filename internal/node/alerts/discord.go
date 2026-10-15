@@ -83,6 +83,16 @@ func Render(n core.Notice, node string) Embed {
 	f := func(k string) string { return fmt.Sprint(n.Fields[k]) }
 	e := Embed{Timestamp: n.Time.UTC().Format(time.RFC3339), Color: gray}
 	switch n.Kind {
+	case core.NoticePasswordGenerated:
+		e.Title, e.Color = "Server password generated", purple
+		e.add("Password", code(f("password")))
+		e.add("Mode", f("mode"))
+		e.add("Regeneration", f("interval"))
+		e.add("Next regeneration", f("next_at"))
+		if f("mode") == "shared" {
+			e.Description = "For participating servers on this node."
+		}
+
 	case core.NoticeCrash:
 		e.Title, e.Color = "Server crashed", red
 		e.add("Exit code", code(f("exit_code")))
