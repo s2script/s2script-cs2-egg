@@ -91,7 +91,6 @@ type s2Installed struct {
 
 type s2PluginStore struct {
 	root, active, disabled, egg, guard *os.File
-	roots                              []s2RegistryRoot
 	host                               *s2Host
 }
 
@@ -461,41 +460,19 @@ func ConfigureS2ScriptPlugins(root string, getenv func(string) string) error {
 		return err
 	}
 	defer s.close()
-	all, err := s.discover()
+	native, err := s.nativeManifest()
 	if err != nil {
 		return err
 	}
-	all, err = s.retained(all)
-	if err != nil {
-		return err
-	}
-	policyPath, err := s2PolicyPath(getenv)
-	if err != nil {
-		return err
-	}
-	policy, err := s.policy(policyPath)
-	if err != nil {
-		return err
-	}
-	if err = s2ValidatePolicyFacts(policy, all, false); err != nil {
-		return err
-	}
-	for name, entry := range policy.Plugins {
-		if entry.Enabled != nil {
-			if _, explicit := overrides[name]; !explicit {
-				overrides[name] = *entry.Enabled
-			}
+	if native == nil {
+		native = &s2NativeManifest{
+			raw:          map[string]json.RawMessage{"dependencies": json.RawMessage(`{}`), "autoUpdate": json.RawMessage(`true`)},
+			dependencies: map[string]string{},
+			disabled:     map[string]bool{},
+		}
+		if err := s.writeJSON(s2NativeManifestPath, native.raw); err != nil {
+			return err
 		}
 	}
-	if err = s2CheckFile(s.egg, "installed-list.json"); err != nil {
-		return err
-	}
-	updated := append([]s2Installed(nil), all...)
-	for i, p := range all {
-		if want, ok := overrides[p.Name]; ok && p.LastCheckStatus != "missing" {
-			updated[i].Enabled = want
-			updated[i].Path = s2Target(p.Filename, want)
-		}
-	}
-	return s.s2Apply(all, updated, nil)
+	return s.configureNative(native, overrides)
 }

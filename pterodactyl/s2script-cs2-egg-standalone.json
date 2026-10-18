@@ -270,26 +270,6 @@
             "field_type": "text"
         },
         {
-            "name": "S2Script plugin policy",
-            "description": "Policy file relative to the server root.",
-            "env_variable": "S2SCRIPT_PLUGIN_FILE",
-            "default_value": "s2script-plugins.json",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Reviewed registry plugins only",
-            "description": "Require selected registry artifacts to have reviewState reviewed.",
-            "env_variable": "S2SCRIPT_REVIEWED_ONLY",
-            "default_value": "0",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|boolean",
-            "field_type": "text"
-        },
-        {
             "name": "MultiAddonManager",
             "description": "Install/update MultiAddonManager from Source2ZE. Existing configuration is preserved. Set 0 to leave installed files untouched.",
             "env_variable": "INSTALL_MULTIADDONMANAGER",

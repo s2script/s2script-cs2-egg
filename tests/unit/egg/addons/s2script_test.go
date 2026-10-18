@@ -649,38 +649,6 @@ func TestS2ScriptHonorsVerifiedNodePin(t *testing.T) {
 	}
 }
 
-func TestS2ScriptBundledPinSelectsMatchingFrameworkRelease(t *testing.T) {
-	files := s2files(t, "0.8.1")
-	e := s2fixture(t, s2zip(t, files), "0.8.1", "valid", "/tags/v0.8.1", false)
-	options := addons.S2ScriptOptions{PluginPins: map[string]string{"@s2script/clientprefs": "0.8.1"}}
-	if err := e.UpdateS2Script(context.Background(), options); err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(s2read(t, e.Root, "addons/s2script/VERSION"), []byte("0.8.1\n")) {
-		t.Fatal("bundled pin did not select matching runtime")
-	}
-}
-
-func TestS2ScriptRejectsConflictingOrInvalidBundledPinsBeforeNetwork(t *testing.T) {
-	for _, options := range []addons.S2ScriptOptions{
-		{Version: "0.8.2", PluginPins: map[string]string{"@s2script/clientprefs": "0.8.1"}},
-		{PluginPins: map[string]string{"@s2script/clientprefs": "0.8.1", "@s2script/basechat": "0.8.2"}},
-		{PluginPins: map[string]string{"@example/private": "0.8.1"}},
-		{PluginPins: map[string]string{"@s2script/clientprefs": "latest"}},
-	} {
-		t.Run("pins", func(t *testing.T) {
-			e := s2fixture(t, nil, "0.8.1", "valid", "/unreachable", false)
-			s2write(t, e.Root, "addons/s2script/bin/linuxsteamrt64/s2script.so", []byte("installed native"))
-			if err := e.UpdateS2Script(context.Background(), options); err == nil {
-				t.Fatal("invalid or conflicting bundled pin accepted")
-			}
-			if !bytes.Equal(s2read(t, e.Root, "addons/s2script/bin/linuxsteamrt64/s2script.so"), []byte("installed native")) {
-				t.Fatal("pin conflict changed installed native file")
-			}
-		})
-	}
-}
-
 func TestS2ScriptDoesNotOverwriteUserPluginAtBundledFilename(t *testing.T) {
 	files := s2files(t, "0.8.1")
 	e := s2fixture(t, s2zip(t, files), "0.8.1", "valid", "/latest", false)

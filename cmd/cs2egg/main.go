@@ -14,8 +14,6 @@ import (
 
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/addons"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/boot"
-	"github.com/K4ryuu/CS2-Egg-Go/internal/logx"
-	"path/filepath"
 )
 
 func main() {
@@ -30,12 +28,8 @@ func main() {
 		root = "/home/container"
 	}
 	if len(os.Args) > 1 && os.Args[1] == "plugins" {
-		env := addons.Env{Root: root, Temp: filepath.Join(root, "temps"), Versions: addons.Versions{Path: filepath.Join(root, "egg/versions.txt")}, Log: logx.New("S2Script", logx.Info, os.Stdout), HTTP: &http.Client{Timeout: 90 * time.Second}}
-		if err := env.S2ScriptPluginCommand(ctx, os.Args[2:], os.Getenv, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
+		fmt.Fprintln(os.Stderr, "Plugins are managed by addons/s2script/plugins.json. Use sm plugins commands in the game console or the s2s server CLI.")
+		os.Exit(1)
 	}
 	unlock, err := addons.AcquireS2ScriptRuntime(root)
 	if err != nil {
