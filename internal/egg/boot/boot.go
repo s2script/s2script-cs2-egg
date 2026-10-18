@@ -206,12 +206,7 @@ func Run(ctx context.Context, env Env) int {
 	addonEnv.UpdateAll(ctx, selection(env), env.flag("ALLOW_TOKENLESS"))
 	if env.flag("INSTALL_S2SCRIPT") {
 		prerelease := env.Getenv("S2SCRIPT_CHANNEL") == "prerelease"
-		pins, err := addons.S2ScriptReleasePins(env.Root, env.Getenv)
-		if err != nil {
-			log.Logf(logx.Error, "S2Script plugin policy is invalid: %v", err)
-			return 1
-		}
-		if err := addonEnv.UpdateS2Script(ctx, addons.S2ScriptOptions{Version: env.Getenv("S2SCRIPT_VERSION"), Prerelease: prerelease, PluginPins: pins}); err != nil {
+		if err := addonEnv.UpdateS2Script(ctx, addons.S2ScriptOptions{Version: env.Getenv("S2SCRIPT_VERSION"), Prerelease: prerelease}); err != nil {
 			log.Logf(logx.Error, "S2Script preparation failed: %v", err)
 			return 1
 		}

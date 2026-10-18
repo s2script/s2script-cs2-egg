@@ -26,7 +26,6 @@ import (
 type S2ScriptOptions struct {
 	Version    string
 	Prerelease bool
-	PluginPins map[string]string
 }
 
 var s2scriptVersion = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
@@ -71,20 +70,6 @@ func IsTransientReleaseError(err error) bool {
 // operator configuration, data and the placement of installed plugins.
 func (e *Env) UpdateS2Script(ctx context.Context, options S2ScriptOptions) error {
 	want := strings.TrimSpace(options.Version)
-	known := map[string]bool{}
-	for _, plugin := range S2ScriptPlugins() {
-		known[plugin.Name] = true
-	}
-	for name, pin := range options.PluginPins {
-		if !known[name] || !s2scriptVersion.MatchString(pin) {
-			return fmt.Errorf("invalid bundled S2Script plugin pin %s=%q", name, pin)
-		}
-		pin = strings.TrimPrefix(pin, "v")
-		if want != "" && want != "latest" && strings.TrimPrefix(want, "v") != pin {
-			return errors.New("bundled S2Script plugin pins conflict with the selected framework version")
-		}
-		want = pin
-	}
 	exact := want != "" && want != "latest"
 	var rel *Release
 	var err error
@@ -300,6 +285,19 @@ func (e *Env) installS2Script(stage, version, revision string) error {
 	if err != nil {
 		return err
 	}
+	native, err := store.nativeManifest()
+	if err != nil {
+		store.close()
+		return err
+	}
+	var nativeOwned map[string]bool
+	if native != nil {
+		nativeOwned, err = store.nativeOwned(native)
+		if err != nil {
+			store.close()
+			return err
+		}
+	}
 	actual, err := store.discover()
 	if err == nil {
 		actual, err = store.retained(actual)
@@ -376,7 +374,7 @@ func (e *Env) installS2Script(stage, version, revision string) error {
 		if rel == "addons/s2script/VERSION" {
 			return nil
 		} // publish VERSION only after the other copies succeed
-		preserve := strings.HasPrefix(rel, "addons/s2script/configs/") || strings.HasPrefix(rel, "addons/s2script/data/") || strings.Contains(rel, "/gamedata/") && strings.Contains(rel, "/custom/")
+		preserve := rel == "addons/s2script/plugins.json" || rel == "addons/s2script/plugins-lock.json" || strings.HasPrefix(rel, "addons/s2script/configs/") || strings.HasPrefix(rel, "addons/s2script/data/") || strings.Contains(rel, "/gamedata/") && strings.Contains(rel, "/custom/")
 		plugin := strings.HasPrefix(rel, "addons/s2script/plugins/")
 		if plugin {
 			if !strings.HasSuffix(rel, ".s2sp") {
@@ -394,6 +392,9 @@ func (e *Env) installS2Script(stage, version, revision string) error {
 				return fmt.Errorf("duplicate bundled S2Script plugin identity %s", id)
 			}
 			bundled[id] = true
+			if nativeOwned[id] {
+				return nil // the native registry updater owns this package
+			}
 			if target, ok := existing[id]; ok {
 				// retained only carries ownership when the current identity,
 				// version, filename and bytes match the verified prior receipt.

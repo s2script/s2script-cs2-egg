@@ -201,24 +201,3 @@ func TestS2ScriptCatalogReturnsIndependentReviewedDefaults(t *testing.T) {
 		t.Fatal("shared catalog")
 	}
 }
-
-func TestS2ScriptControlsInheritSavedPolicyBeforePanelOverride(t *testing.T) {
-	root := t.TempDir()
-	putPlugin(t, root, "chat.s2sp", "@s2script/basechat", true)
-	policy := `{"schema_version":1,"plugins":{"@s2script/basechat":{"source":"local","version":"0.8.1","enabled":false}}}`
-	if err := os.WriteFile(filepath.Join(root, "s2script-plugins.json"), []byte(policy), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := addons.ConfigureS2ScriptPlugins(root, pluginEnv(nil)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(root, pluginDir, "disabled/chat.s2sp")); err != nil {
-		t.Fatal(err)
-	}
-	if err := addons.ConfigureS2ScriptPlugins(root, pluginEnv(map[string]string{"S2SCRIPT_PLUGIN_BASECHAT": "1"})); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(root, pluginDir, "chat.s2sp")); err != nil {
-		t.Fatal(err)
-	}
-}

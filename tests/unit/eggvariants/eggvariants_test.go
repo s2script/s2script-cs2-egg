@@ -115,6 +115,29 @@ func TestStandaloneAgainstTheRealEggFile(t *testing.T) {
 	}
 }
 
+func TestEggExportsDoNotExposeRegistryPath(t *testing.T) {
+	root := findRepoRoot(t)
+	for _, name := range []string{"s2script-cs2-egg.json", "s2script-cs2-egg-standalone.json"} {
+		data, err := os.ReadFile(filepath.Join(root, "pterodactyl", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var egg struct {
+			Variables []struct {
+				Env string `json:"env_variable"`
+			}
+		}
+		if err := json.Unmarshal(data, &egg); err != nil {
+			t.Fatal(err)
+		}
+		for _, variable := range egg.Variables {
+			if variable.Env == "S2SCRIPT_PLUGIN_FILE" || variable.Env == "S2SCRIPT_REVIEWED_ONLY" {
+				t.Errorf("%s still exposes legacy registry startup option %s", name, variable.Env)
+			}
+		}
+	}
+}
+
 func findRepoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()

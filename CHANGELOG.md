@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Use S2Script's native `addons/s2script/plugins.json` exclusively, preserve native registry files, and remove the old egg registry manager and its startup controls.
 - Sync the upstream baseline to K4ryuu CS2-Egg-Go v1.0.4 (db6c5f4).
 - Skip unchanged Steam client copies and permission changes during node update checks.
 - Compare Steam client contents so same-size replacements with older timestamps still update.
