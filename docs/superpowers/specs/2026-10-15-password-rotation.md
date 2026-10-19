@@ -21,9 +21,14 @@ one before starting, to avoid accidentally starting public. Disabling node rotat
 retains cached passwords. Opting a server out removes only its managed cfg include
 on restart, returning control to its original configuration.
 
-The egg caches its assignment, maintains a generated cfg included at the end of
-server.cfg, and reapplies live and after map activation. No secret in arguments,
-normal logs, crash reports, or status. Explicit root-only CLI reveal is supported.
+Amended 2026-10-19: the egg caches its assignment and sets it once through
+`+sv_password` at startup. Remove the legacy managed server.cfg include and all
+live/map reapplication. Operators may change or clear sv_password for playtests.
+After durably saving a changed assignment, the egg requests an immediate Wings
+restart of its own opted-in server. Retry failures and deduplicate successful
+requests. Startup arguments contain the generated password at the operator's
+request; normal logs, crash reports and status remain masked. Explicit root-only
+CLI reveal is supported.
 
 Discord uses the existing enabled alerts webhook independently of ordinary event
 filters. Shared generation creates one notification. A persisted pending flag
@@ -34,7 +39,7 @@ Do not log webhook response bodies or credential payloads.
 
 Verify state recovery, disk failures, calendar boundaries, dictionary validation,
 both gates, socket identity, concurrent shared requests, unique collisions,
-config preservation, restart and map application, masking and Discord retries.
+config preservation, startup-only application, rotation restarts, masking and Discord retries.
 No deployment or live Discord posts as part of development.
 
 Review refinements: use one authoritative generated cfg as the egg cache, with

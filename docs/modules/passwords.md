@@ -32,6 +32,12 @@ apply to the next generation. Node configuration changes need a daemon restart.
 
 Connected opted-in servers are checked every 30 seconds. Offline servers catch
 up on their next start, generating once rather than replaying missed periods.
+When a running server receives a different generated password, it saves the
+assignment and requests a restart through Wings. Repeated delivery of the same
+assignment does not reapply `sv_password` or restart the server again. Failed
+restart requests are retried on later deliveries. Restarts are immediate,
+including when players are connected. Update both the node binary and server
+image for this behavior.
 A server newly joining shared mode receives the existing shared assignment.
 Changing modes selects the saved assignment for the new mode, or generates it
 if needed. An overdue saved assignment rotates before being returned.
@@ -78,10 +84,18 @@ state instead of deleting it and unintentionally issuing new passwords.
 
 Each egg caches only its own assignment in
 `game/csgo/cfg/cs2node-password.cfg` (`0600`). This single file contains both
-assignment metadata in a comment and the engine command, so they commit together. A marked include at the end of
-`server.cfg` loads it on startup and map changes; the egg also reapplies it through
-the console after map activation and when receiving updates. Avoid other plugins
-or configs that independently manage `sv_password`.
+assignment metadata in a comment and the engine command, so they commit together.
+The egg uses this saved assignment only when building the startup command, as
+`+sv_password "..."`. It does not execute the cache as a cfg, modify `server.cfg`,
+or reapply the password on map activation, hibernation, or unchanged node replies.
+On upgrade it removes the old marked include from `server.cfg`, preserving the
+rest of that file. Other configs or plugins can still change the live password.
+
+For a playtest, use `sv_password "your-test-password"` or `sv_password ""` in the
+server console. The password manager leaves this override alone until the next
+server start. Your own map configs can still override it. To opt out across
+restarts, set `ENABLE_ROTATING_PASSWORD=0` in the panel and restart. A scheduled
+rotation still restarts an opted-in server, restoring the generated password.
 
 The current and previously received passwords are masked from normal egg logs and
 crash tails. Node status exposes only mode, interval and pending notification
@@ -95,7 +109,7 @@ sudo cs2node passwords show shared
 
 Disabling the node module stops regeneration; enrolled servers retain their last
 cached password, including during a node outage. Set a server's variable to `0`
-and restart it to remove the managed include and return to its ordinary config.
+and restart it to omit the generated startup argument and use its ordinary config.
 Its original config contents are preserved. Root and that server's owner can read
 the assigned password; shared mode intentionally gives participants the same one.
 

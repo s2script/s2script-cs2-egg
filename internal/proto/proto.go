@@ -20,21 +20,22 @@ const Version = 1
 type Type string
 
 const (
-	TypeHello          Type = "hello"
-	TypePasswordQuery  Type = "password.query"
-	TypePasswordUpdate Type = "password.update"
-	TypeVpkStatus      Type = "vpk.status"
-	TypeGuardBlock     Type = "guard.block"
-	TypeGuardHit       Type = "guard.hit"
-	TypeGuardEvent     Type = "guard.ev"
-	TypeServerState    Type = "server.state"
-	TypeConsoleExec    Type = "console.exec"
-	TypeCrash          Type = "egg.crash"
-	TypeAddonQuery     Type = "addon.query"
-	TypeAddonRelease   Type = "addon.release"
-	TypeWorkshopSync   Type = "workshop.sync"
-	TypeWorkshopReady  Type = "workshop.ready"
-	TypeLogLine        Type = "log.line"
+	TypeHello           Type = "hello"
+	TypePasswordQuery   Type = "password.query"
+	TypePasswordUpdate  Type = "password.update"
+	TypePasswordRestart Type = "password.restart"
+	TypeVpkStatus       Type = "vpk.status"
+	TypeGuardBlock      Type = "guard.block"
+	TypeGuardHit        Type = "guard.hit"
+	TypeGuardEvent      Type = "guard.ev"
+	TypeServerState     Type = "server.state"
+	TypeConsoleExec     Type = "console.exec"
+	TypeCrash           Type = "egg.crash"
+	TypeAddonQuery      Type = "addon.query"
+	TypeAddonRelease    Type = "addon.release"
+	TypeWorkshopSync    Type = "workshop.sync"
+	TypeWorkshopReady   Type = "workshop.ready"
+	TypeLogLine         Type = "log.line"
 )
 
 // vpk.status states, in the order a push goes through them
@@ -70,14 +71,21 @@ type Hello struct {
 
 // PasswordQuery requests only this socket's assignment; no target id is accepted.
 type PasswordQuery struct{}
+
+// PasswordRestart confirms the egg saved this assignment and needs a restart.
+// The socket determines the target; no server id or password crosses this request.
+type PasswordRestart struct {
+	NextAt string `json:"next_at"`
+}
 type PasswordUpdate struct {
 	Password string `json:"password,omitempty"`
 	NextAt   string `json:"next_at,omitempty"`
 	Err      string `json:"err,omitempty"`
 }
 
-func (*PasswordQuery) Type() Type  { return TypePasswordQuery }
-func (*PasswordUpdate) Type() Type { return TypePasswordUpdate }
+func (*PasswordQuery) Type() Type   { return TypePasswordQuery }
+func (*PasswordUpdate) Type() Type  { return TypePasswordUpdate }
+func (*PasswordRestart) Type() Type { return TypePasswordRestart }
 
 // GuardInfo is the egg guard's mode, so the node knows whether kicks land.
 type GuardInfo struct {
@@ -254,6 +262,8 @@ func Decode(line []byte) (Message, error) {
 		m = &PasswordQuery{}
 	case TypePasswordUpdate:
 		m = &PasswordUpdate{}
+	case TypePasswordRestart:
+		m = &PasswordRestart{}
 	case TypeHello:
 		m = &Hello{}
 	case TypeVpkStatus:

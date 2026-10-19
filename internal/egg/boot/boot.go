@@ -271,6 +271,7 @@ func Run(ctx context.Context, env Env) int {
 	}
 
 	cmdline := startup.Expand(env.Getenv("STARTUP"), env.Getenv)
+	cmdline = passwordManager.Startup(cmdline)
 	log.Logf(logx.Info, "Starting server: %s", cmdline)
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", cmdline)
 	cmd.Dir = env.Root
@@ -340,7 +341,6 @@ func Run(ctx context.Context, env Env) int {
 		log.Log(logx.Input, log.Mask(cmd))
 	}
 	srv.Line = func(line string) {
-		passwordManager.Observe(line, srv.Send)
 		// the ring is what a crash report carries out of the container, so
 		// it holds the masked line: the terminal echoes whatever is typed
 		// into it, and an operator setting rcon_password in the panel
@@ -372,8 +372,8 @@ func Run(ctx context.Context, env Env) int {
 			if env.flag("ENABLE_ROTATING_PASSWORD") {
 				if err := passwordManager.Accept(*x); err != nil {
 					log.Log(logx.Warning, "Password update unavailable; retaining the current assignment")
-				} else {
-					passwordManager.Apply(srv.Send)
+				} else if nextAt := passwordManager.RestartPending(); nextAt != "" {
+					link.send(&proto.PasswordRestart{NextAt: nextAt})
 				}
 			}
 		}

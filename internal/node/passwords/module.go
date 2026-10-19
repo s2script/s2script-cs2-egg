@@ -24,11 +24,13 @@ import (
 )
 
 type Module struct {
-	delivery sync.Map
-	Log      *slog.Logger
-	HTTP     *http.Client
-	cfg      Config
-	store    *Store
+	delivery   sync.Map
+	restarted  sync.Map // server -> last assignment restarted successfully
+	restarting sync.Map // at most one Wings request per socket's server
+	Log        *slog.Logger
+	HTTP       *http.Client
+	cfg        Config
+	store      *Store
 }
 
 func New(log *slog.Logger, client *http.Client) *Module { return &Module{Log: log, HTTP: client} }
@@ -67,6 +69,15 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 		return map[string]any{"mode": m.cfg.Mode, "interval": m.cfg.Interval, "pending_notifications": len(s.Pending())}
 	})
 	c.Handle(proto.TypePasswordQuery, func(server string, _ proto.Message) { m.send(c, server) })
+	c.Handle(proto.TypePasswordRestart, func(server string, msg proto.Message) {
+		if _, busy := m.restarting.LoadOrStore(server, struct{}{}); busy {
+			return
+		}
+		go func() {
+			defer m.restarting.Delete(server)
+			m.restart(ctx, c, server, msg.(*proto.PasswordRestart))
+		}()
+	})
 	downloadCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	if err := Provision(downloadCtx, m.HTTP, m.cfg.Wordlist); err != nil {
 		m.Log.Warn("password dictionary unavailable; retaining existing assignments")

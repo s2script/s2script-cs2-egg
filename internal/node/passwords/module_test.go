@@ -90,6 +90,94 @@ func TestSocketOptInAndIdentity(t *testing.T) {
 	}
 }
 
+func TestRotationRestartUsesOnlyItsEnrolledSocketServer(t *testing.T) {
+	requests := make(chan string, 4)
+	wings := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if r.Method != http.MethodPost || string(body) != `{"action":"restart"}` || r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Error("invalid Wings restart request")
+		}
+		select {
+		case requests <- r.URL.Path:
+		default:
+			t.Error("too many restart requests")
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer wings.Close()
+	configPath := filepath.Join(t.TempDir(), "wings.yml")
+	_, port, _ := strings.Cut(strings.TrimPrefix(wings.URL, "http://"), ":")
+	if err := os.WriteFile(configPath, []byte("token: test-token\napi:\n  host: 127.0.0.1\n  port: "+port+"\n  ssl:\n    enabled: false\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := testConfig(t, "shared")
+	n := nodeconfig.Default()
+	n.SetSection("passwords", cfg)
+	n.SetSection("vpksync", map[string]string{"wings_config": configPath})
+	volume, err := os.MkdirTemp("/tmp", "pwrestart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(volume)
+	var containers []core.Container
+	for _, server := range []string{"one", "off"} {
+		path := filepath.Join(volume, server)
+		if err := os.MkdirAll(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+		containers = append(containers, core.Container{ID: server, Name: server, Volume: path, Owner: core.Owner{UID: os.Getuid(), GID: os.Getgid()}})
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	c := core.New(docker{containers}, n, []string{"passwords"}, logger)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(logger, &http.Client{})
+	go m.Run(ctx, c)
+	go c.Run(ctx)
+	one, err := nodeclient.Connect(ctx, core.SocketPath(filepath.Join(volume, "one")), 3*time.Second, proto.Hello{RotatingPassword: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer one.Close()
+	off, err := nodeclient.Connect(ctx, core.SocketPath(filepath.Join(volume, "off")), 3*time.Second, proto.Hello{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer off.Close()
+	update, err := one.Request(&proto.PasswordQuery{}, 3*time.Second, func(m proto.Message) bool { _, ok := m.(*proto.PasswordUpdate); return ok })
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextAt := update.(*proto.PasswordUpdate).NextAt
+	if nextAt == "" {
+		t.Fatal("missing assignment")
+	}
+	if err := off.Send(&proto.PasswordRestart{NextAt: nextAt}); err != nil {
+		t.Fatal(err)
+	}
+	if err := one.Send(&proto.PasswordRestart{NextAt: nextAt}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case path := <-requests:
+		if path != "/api/servers/one/power" {
+			t.Fatal("restart escaped its opted-in socket server")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Wings never received the rotation restart")
+	}
+	for i := 0; i < 10; i++ {
+		if err := one.Send(&proto.PasswordRestart{NextAt: nextAt}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	select {
+	case path := <-requests:
+		t.Fatal("unenrolled or duplicate restart reached Wings:", path)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
 func TestDiscordFirstRotationRetryAndRestart(t *testing.T) {
 	cfg := testConfig(t, "shared")
 	s, _ := Open(cfg)
