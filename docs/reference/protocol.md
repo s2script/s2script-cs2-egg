@@ -58,6 +58,7 @@ From the egg:
 | Type | Carries |
 |---|---|
 | `password.query` | Requests the current socket server's password assignment; carries no target id |
+| `password.restart` | Confirms the egg cached a rotated assignment (`next_at`) and requests a Wings restart of its own socket's server |
 | `hello` | Egg version, build stamp, boot id, whether the bot guard is on and in which mode |
 | `guard.hit` | A rule tripped: address, rule, ban length, client id |
 | `guard.ev` | A client joined, left or chatted. The node's heuristics run on these |
@@ -102,3 +103,7 @@ If the daemon restarts, the egg reconnects on its own and re-sends its state.
 
 The egg hello carries `rotating_password` (default false). The node uses the
 socket identity and this opt-in to gate password queries. Old eggs never opt in.
+Restart requests are also gated by this opt-in, must identify the current saved
+assignment, and are deduplicated after Wings accepts them. A failed restart is
+retried when the egg receives the assignment again. The egg applies passwords
+only through the startup argument, allowing live console overrides.

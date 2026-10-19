@@ -3,7 +3,6 @@
 package passwords
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,8 +29,8 @@ func TestCacheConfigPreservationAndOptOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(cfg)
-	if !strings.HasPrefix(string(data), original) || strings.Count(string(data), "exec cs2node-password.cfg") != 1 {
-		t.Fatal("user config changed or include duplicated")
+	if string(data) != original {
+		t.Fatal("user config changed")
 	}
 	reopened, err := Open(root, true)
 	if err != nil || !reopened.Ready() {
@@ -40,8 +39,7 @@ func TestCacheConfigPreservationAndOptOut(t *testing.T) {
 	if err := reopened.Accept(u); err != nil {
 		t.Fatal(err)
 	}
-	var command string
-	if err := reopened.Apply(func(s string) error { command = s; return nil }); err != nil || command != `sv_password "lantern-meadow-copper"` {
+	if got := reopened.Startup("./game/cs2.sh -dedicated"); got != `./game/cs2.sh -dedicated +sv_password "lantern-meadow-copper"` {
 		t.Fatal("cached password not applied")
 	}
 	for _, p := range []string{m.cachePath(), filepath.Join(root, "game/csgo/cfg/cs2node-password.cfg")} {
@@ -79,55 +77,46 @@ func TestUnsafeUpdateAndDiskFailureRetainKnownPassword(t *testing.T) {
 	if err := m.Accept(proto.PasswordUpdate{Password: "river-lantern-copper", NextAt: first.NextAt}); err == nil {
 		t.Fatal("disk error ignored")
 	}
-	var got string
-	m.Apply(func(s string) error { got = s; return nil })
+	got := m.Startup("cs2")
 	if !strings.Contains(got, first.Password) {
 		t.Fatal("failed update changed current credential")
 	}
 }
-func TestMaskingAndMapReapplication(t *testing.T) {
+func TestMaskingAndRotationRequiresRestart(t *testing.T) {
 	m, _ := Open(t.TempDir(), true)
 	u := proto.PasswordUpdate{Password: "lantern-meadow-copper", NextAt: "2026-11-15T12:00:00Z"}
 	m.Accept(u)
+	m.Startup("cs2")
 	second := "river-birch-copper"
 	m.Accept(proto.PasswordUpdate{Password: second, NextAt: "2026-12-15T12:00:00Z"})
 	masked := m.Mask("arbitrary echo " + u.Password + " and " + second)
 	if strings.Contains(masked, u.Password) || strings.Contains(masked, second) {
 		t.Fatal("current/previous password leaked")
 	}
-	calls := 0
-	send := func(s string) error {
-		calls++
-		if s != `sv_password "river-birch-copper"` {
-			t.Fatal("wrong command")
-		}
-		return nil
-	}
-	m.Observe("ordinary output", send)
-	m.Observe("Host activate", send)
-	m.Observe("Host activate", send)
-	if calls != 2 {
-		t.Fatal("map changes did not reapply")
-	}
-	if err := m.Apply(func(string) error { return errors.New("not running") }); err == nil {
-		t.Fatal("send failure ignored")
+	if m.RestartPending() != "2026-12-15T12:00:00Z" {
+		t.Fatal("rotation did not request a restart")
 	}
 }
 
-func TestPasswordEchoDoesNotTriggerApplyLoop(t *testing.T) {
+func TestUnchangedAssignmentDoesNotRestart(t *testing.T) {
 	m, _ := Open(t.TempDir(), true)
-	m.Accept(proto.PasswordUpdate{Password: "hibernating-meadow-copper", NextAt: "2026-11-15T12:00:00Z"})
-	calls := 0
-	m.Observe(`sv_password "hibernating-meadow-copper"`, func(string) error { calls++; return nil })
-	if calls != 0 {
-		t.Fatal("echo triggered another password command")
+	u := proto.PasswordUpdate{Password: "hibernating-meadow-copper", NextAt: "2026-11-15T12:00:00Z"}
+	m.Accept(u)
+	m.Startup("cs2")
+	for i := 0; i < 10; i++ {
+		if err := m.Accept(u); err != nil {
+			t.Fatal(err)
+		}
+		if m.RestartPending() != "" {
+			t.Fatal("unchanged assignment requested a restart")
+		}
 	}
 }
 
 func TestFailedAssignmentIsStillMasked(t *testing.T) {
 	root := t.TempDir()
 	m, _ := Open(root, true)
-	path := filepath.Join(root, "game/csgo/cfg/server.cfg")
+	path := m.cachePath()
 	os.MkdirAll(path, 0700)
 	p := "lantern-meadow-copper"
 	if m.Accept(proto.PasswordUpdate{Password: p, NextAt: "2026-11-15T12:00:00Z"}) == nil {
@@ -138,23 +127,23 @@ func TestFailedAssignmentIsStillMasked(t *testing.T) {
 	}
 }
 
-func TestIncludeFailureDoesNotPublishAssignmentFiles(t *testing.T) {
+func TestCacheFailureRetainsStartupAssignment(t *testing.T) {
 	root := t.TempDir()
 	m, _ := Open(root, true)
 	first := proto.PasswordUpdate{Password: "lantern-meadow-copper", NextAt: "2026-11-15T12:00:00Z"}
 	if err := m.Accept(first); err != nil {
 		t.Fatal(err)
 	}
-	cfg := filepath.Join(root, "game/csgo/cfg/server.cfg")
-	os.Remove(cfg)
-	os.Mkdir(cfg, 0700)
+	m.Startup("cs2")
+	os.Remove(m.cachePath())
+	os.Mkdir(m.cachePath(), 0700)
 	if err := m.Accept(proto.PasswordUpdate{Password: "river-birch-copper", NextAt: first.NextAt}); err == nil {
-		t.Fatal("expected include failure")
+		t.Fatal("expected cache failure")
 	}
-	for _, p := range []string{m.cachePath(), filepath.Join(root, "game/csgo/cfg/cs2node-password.cfg")} {
-		data, _ := os.ReadFile(p)
-		if !strings.Contains(string(data), first.Password) {
-			t.Fatal("failed update replaced assignment file")
-		}
+	if m.RestartPending() != "" {
+		t.Fatal("failed update requested a restart")
+	}
+	if got := m.Startup("cs2"); got != `cs2 +sv_password "lantern-meadow-copper"` {
+		t.Fatal("failed update replaced startup password")
 	}
 }

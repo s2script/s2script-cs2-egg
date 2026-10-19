@@ -501,7 +501,7 @@
         },
         {
             "name": "Rotating Join Password",
-            "description": "Opt into node-managed three-word join passwords. Requires the node passwords module. Restart after changing. The node controls sharing and daily/weekly/bi-weekly/monthly regeneration.",
+            "description": "Set a node-generated three-word join password at startup. Requires the node passwords module. Rotations restart this server through Wings. Live console overrides remain until restart. Restart after changing this switch.",
             "env_variable": "ENABLE_ROTATING_PASSWORD",
             "default_value": "0",
             "user_viewable": true,

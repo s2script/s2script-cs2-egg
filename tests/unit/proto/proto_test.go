@@ -30,6 +30,9 @@ func roundTrip(t *testing.T, m proto.Message) proto.Message {
 
 func TestEveryMessageRoundTrips(t *testing.T) {
 	msgs := []proto.Message{
+		&proto.PasswordQuery{},
+		&proto.PasswordUpdate{Password: "lantern-meadow-copper", NextAt: "2026-11-15T12:00:00Z"},
+		&proto.PasswordRestart{NextAt: "2026-11-15T12:00:00Z"},
 		&proto.Hello{Version: "1.0.0", Modules: []string{"vpksync", "guard"}},
 		&proto.Hello{Version: "1.0.0", BootID: "abc", Guard: &proto.GuardInfo{Enabled: true, Action: "block"}},
 		&proto.VpkStatus{State: proto.StateQueued, QueuePos: 3},

@@ -14,7 +14,7 @@ import (
 )
 
 // preparePassword runs after other boot-time node requests and before starting
-// the engine, so its managed cfg already protects the initial map.
+// the engine, so the assignment is available for the startup command.
 func preparePassword(ctx context.Context, env Env, node *nodeclient.Client, log *logx.Console) (*passwords.Manager, error) {
 	enabled := env.flag("ENABLE_ROTATING_PASSWORD")
 	manager, err := passwords.Open(env.Root, enabled)
