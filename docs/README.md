@@ -19,6 +19,7 @@
 | [upgrading.md](upgrading.md) | Image tags, release channels, self-update, rollback |
 | [migrating-from-bash.md](migrating-from-bash.md) | From the bash egg, and the way back |
 | [troubleshooting.md](troubleshooting.md) | Symptom first, then the fix |
+| [connection tracing](modules/connection-trace.md) | Opt-in timelines for failed connections and successful retries |
 | [security.md](security.md) | What the daemon trusts and what it refuses to do |
 
 ## Modules

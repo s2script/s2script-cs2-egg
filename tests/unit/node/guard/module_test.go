@@ -24,12 +24,13 @@ import (
 )
 
 type fakeFW struct {
-	mu      sync.Mutex
-	applied int
-	ports   []uint16
-	blocks  map[netip.Addr]time.Duration
-	players map[netip.Addr]time.Duration
-	sample  guard.RateSample
+	mu          sync.Mutex
+	applied     int
+	ports       []uint16
+	blocks      map[netip.Addr]time.Duration
+	players     map[netip.Addr]time.Duration
+	sample      guard.RateSample
+	sampleReads int
 }
 
 func newFakeFW() *fakeFW {
@@ -85,6 +86,7 @@ func (f *fakeFW) Blocks() ([]guard.BlockEntry, error) {
 func (f *fakeFW) RateSample() (guard.RateSample, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.sampleReads++
 	out := guard.RateSample{}
 	for k, v := range f.sample {
 		out[k] = v
