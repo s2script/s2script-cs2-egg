@@ -1,0 +1,13 @@
+Accepting Steam Net connection #2921449639 UDP steamid:76561198000000001@203.0.113.7:53071
+Receiving C2S_CONNECT [protocol 14178 0 auth 3] from 203.0.113.7:53071
+CServerSideClientBase::Connect( name='Alice', userid=10, fake=0, connectiontypeflags=4, chan->addr=203.0.113.7:53071 )
+Client 10 'Alice' signon state SIGNONSTATE_NONE -> SIGNONSTATE_CONNECTED
+SV:  Dropped client 'Alice' from server(29): NETWORK_DISCONNECT_TIMEDOUT
+Accepting Steam Net connection #2921449640 UDP steamid:76561198000000001@203.0.113.7:53090
+Receiving C2S_CONNECT [protocol 14178 0 auth 3] from 203.0.113.7:53090
+CServerSideClientBase::Connect( name='Alice', userid=11, fake=0, connectiontypeflags=4, chan->addr=203.0.113.7:53090 )
+Client 11 'Alice' signon state SIGNONSTATE_NONE -> SIGNONSTATE_CONNECTED
+Client 11 'Alice' signon state SIGNONSTATE_CONNECTED -> SIGNONSTATE_NEW
+Client 11 'Alice' signon state SIGNONSTATE_NEW -> SIGNONSTATE_PRESPAWN
+Client 11 'Alice' signon state SIGNONSTATE_PRESPAWN -> SIGNONSTATE_SPAWN
+Client 11 'Alice' signon state SIGNONSTATE_SPAWN -> SIGNONSTATE_FULL

@@ -46,12 +46,13 @@ type Module struct {
 	offenders *Offenders
 	rates     *RatesLog
 
-	mu        sync.Mutex
-	clients   map[netip.Addr]*Client
-	portOwner map[uint16]string
-	lastPorts string
-	sample    RateSample // newest dump from the idle sampler
-	sampleAt  time.Time
+	mu          sync.Mutex
+	clients     map[netip.Addr]*Client
+	portOwner   map[uint16]string
+	lastPorts   string
+	sample      RateSample // newest dump from the idle sampler
+	sampleAt    time.Time
+	sampleValid bool // diagnostics must not present a partial failed dump as evidence
 }
 
 // New returns the module.
@@ -139,6 +140,9 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 	c.ProvideStatus(m.Name(), m.status)
 	c.Handle(proto.TypeGuardHit, func(container string, msg proto.Message) { m.onHit(c, container, msg.(*proto.GuardHit)) })
 	c.Handle(proto.TypeGuardEvent, func(container string, msg proto.Message) { m.onEvent(c, container, msg.(*proto.GuardEvent)) })
+	c.Handle(proto.TypeConnectionTraceQuery, func(container string, msg proto.Message) {
+		m.onTraceQuery(c, container, msg.(*proto.ConnectionTraceQuery))
+	})
 	m.refreshPorts(c)
 
 	go func() {
@@ -362,7 +366,7 @@ func (m *Module) chatCheck(c *core.Core, container string, ip netip.Addr, uid in
 		if sample, err = m.FW.RateSample(); err != nil {
 			return
 		}
-		m.cacheSample(sample, m.Now())
+		m.cacheSample(sample, m.Now(), true)
 	}
 	cnt, ok := sample[ip]
 	if !ok || cnt.Packets < 30 {
@@ -380,9 +384,10 @@ func (m *Module) chatCheck(c *core.Core, container string, ip netip.Addr, uid in
 }
 
 // cacheSample keeps the newest rate dump for the cheap readers.
-func (m *Module) cacheSample(s RateSample, now time.Time) {
+func (m *Module) cacheSample(s RateSample, now time.Time, valid bool) {
 	m.mu.Lock()
 	m.sample, m.sampleAt = s, now
+	m.sampleValid = valid
 	m.mu.Unlock()
 }
 
@@ -423,7 +428,7 @@ func (m *Module) idleLoop(ctx context.Context, c *core.Core) {
 		cur, err := m.FW.RateSample()
 		now := m.Now()
 		m.offenders.Flush(now)
-		m.cacheSample(cur, now)
+		m.cacheSample(cur, now, err == nil)
 		if err != nil || prev == nil {
 			prev = cur
 			continue
