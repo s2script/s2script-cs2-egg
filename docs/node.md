@@ -25,6 +25,7 @@ Enable `vpksync` for one shared CS2 install. It downloads CS2 to `/srv/cs2-share
 | `guard` | Host packet filtering; requires a supported kernel |
 | `crashes`, `metrics` | Crash evidence and node/server status |
 | `backup`, `cleanup`, `consolelog` | Backups, file cleanup and persistent console history |
+| `maintenance` | Host image/build-cache pruning, journal retention and disk/reboot alerts; starts as a dry run |
 | `alerts` | Discord notifications; requires a webhook |
 
 Keep the S2Script image-discovery prefix. The daemon watches Docker for matching images, including servers created later. You do not register UUIDs, configure Pelican mounts, or rerun the wizard for each server.
@@ -55,5 +56,11 @@ sudo cs2node uninstall
 ```
 
 The node follows its own `stable`/`beta` channel, independently of the S2Script framework channel. The old independent `s2node` service/config is incompatible; stop it before installing this generation. See [UPSTREAM.md](../UPSTREAM.md).
+
+After updating an existing node, run `sudo cs2node install` to opt into new
+modules such as [maintenance](modules/maintenance.md). Existing configurations
+keep their enabled modules. Review maintenance dry-run reports before changing
+`dry_run` to `false`; unattended security upgrades use the separate
+`sudo cs2node maintenance setup` command.
 
 Uninstall keeps config and shared files. Upstream's `uninstall --purge` also removes config. [Module index](modules/README.md) · [Node config](reference/node-config.md) · [Upgrading](upgrading.md)

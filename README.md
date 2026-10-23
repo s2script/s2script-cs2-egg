@@ -51,7 +51,7 @@ Prefer a standalone server? Skip step 1; everything installs into its own volume
 | `INSTALL_GAMEFIXES` | `1` | Install/update GameFixes |
 | `S2SCRIPT_PLUGIN_*` controls | `default` | Preserve policy/manual choices, or explicitly enable/disable bundled plugins |
 
-Metamod is automatically required by these addons. Plugin downloads, checks, exact pins, dependencies and policy are documented in the [addon and plugin guide](docs/addons.md). Other upstream node modules remain available: [VPK sync](docs/modules/vpk-sync.md), [workshop cache](docs/modules/workshop.md), [guard](docs/modules/guard.md), [backups](docs/modules/backups.md), [metrics](docs/modules/metrics.md), and [module index](docs/modules/README.md).
+Metamod is automatically required by these addons. Plugin downloads, checks, exact pins, dependencies and policy are documented in the [addon and plugin guide](docs/addons.md). Other upstream node modules remain available: [VPK sync](docs/modules/vpk-sync.md), [workshop cache](docs/modules/workshop.md), [guard](docs/modules/guard.md), [backups](docs/modules/backups.md), [metrics](docs/modules/metrics.md), [maintenance](docs/modules/maintenance.md), and [module index](docs/modules/README.md).
 
 For a dev node sharing one public address, use Docker bridge networking with separate allocated ports. Do not assign the host's own address to a macvlan container. Prod nodes with separate container addresses can retain their correctly provisioned network design.
 
