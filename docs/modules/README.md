@@ -19,8 +19,9 @@ flowchart TB
         m9["cleanup"]
         m10["consolelog"]
         m11["passwords"]
+        m12["maintenance"]
         core --- m1 & m2 & m3 & m4 & m5
-        core --- m6 & m7 & m8 & m9 & m10 & m11
+        core --- m6 & m7 & m8 & m9 & m10 & m11 & m12
     end
     core <-->|"socket per volume"| eggs["cs2egg in every container"]
 ```
@@ -38,6 +39,7 @@ flowchart TB
 | [backup](backups.md) | Disk for the archives | A nightly copy of what you cannot re-download |
 | [metrics](metrics.md) | A local port | `cs2node top` and Prometheus |
 | [cleanup](cleanup.md) | Nothing | Demos, logs and dumps deleted on a schedule, one rule set for the node, off the server boot path |
+| [maintenance](maintenance.md) | Nothing | Dangling docker images, build cache and old journals pruned, disk and reboot alerts, optional unattended upgrades |
 | [passwords](passwords.md) | Small private state and a dictionary | Opt-in rotating join passwords and Discord delivery |
 | [consolelog](console-log.md) | Disk for the log files | Every server's console tab, saved past a restart, gzip-compressed after a day |
 
