@@ -75,6 +75,6 @@ Attach with IDA: Debugger > Remote GDB debugger, or `gdb` with `target remote <i
 |---|---|---|
 | `ENABLE_ROTATING_PASSWORD` | `0` | Opt this server into the node's passwords module; restart after changing |
 
-The node controls shared/unique mode and regeneration interval. See
+The node controls shared/unique mode, cron decay schedule and timezone. See
 [rotating passwords](../modules/passwords.md), including initial-enrollment and
 node-outage behavior.

@@ -43,13 +43,14 @@ func (*Module) Questions() []module.Question {
 	d := Defaults()
 	return []module.Question{
 		{Key: "mode", Prompt: "Password sharing", Default: d.Mode, Kind: module.Choice, Choices: []module.Option{{Value: "unique", Desc: "each participating server gets a different password"}, {Value: "shared", Desc: "participating servers on this node share one password"}}},
-		{Key: "interval", Prompt: "Password regeneration interval", Default: d.Interval, Kind: module.Choice, Choices: []module.Option{{Value: "daily", Desc: "every 24 hours"}, {Value: "weekly", Desc: "every seven days"}, {Value: "bi-weekly", Desc: "every fourteen days"}, {Value: "monthly", Desc: "every calendar month"}}},
+		{Key: "interval", Prompt: "Password decay schedule", Default: d.Interval, Help: "cron: minute hour day month weekday; e.g. 0 4 * * * = daily at 04:00, 0 4 * * MON = Mondays at 04:00; daily/weekly/bi-weekly/monthly also accepted"},
+		{Key: "timezone", Prompt: "Password cron timezone", Default: d.Timezone, Help: "UTC or an IANA name such as America/Chicago; applies to cron expressions, legacy intervals stay elapsed UTC periods"},
 		{Key: "wordlist", Prompt: "Dictionary file", Default: d.Wordlist, Help: "default is downloaded once with a pinned checksum; custom list requires at least 7772 distinct usable words"},
 		{Key: "dir", Prompt: "Private password state directory", Default: d.Dir},
 	}
 }
 func (*Module) Notes() []string {
-	return []string{"Set ENABLE_ROTATING_PASSWORD=1 on each participating server and restart it.", "Generated passwords are sent to the enabled alerts webhook, including the first generation; use a private Discord channel.", "Node mode/config changes require a daemon restart; disabling rotation retains each server's last password."}
+	return []string{"Set ENABLE_ROTATING_PASSWORD=1 on each participating server and restart it.", "Generated passwords are sent to the enabled alerts webhook, including the first generation; use a private Discord channel.", "Decay is checked every 30 seconds; changed passwords restart participating servers through Wings, including when players are connected.", "Node config changes require a daemon restart; schedule changes apply after the saved deadline. Disabling rotation retains each server's last password."}
 }
 
 func (m *Module) Run(ctx context.Context, c *core.Core) error {
@@ -66,7 +67,7 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 	}
 	m.store = s
 	c.ProvideStatus(m.Name(), func() any {
-		return map[string]any{"mode": m.cfg.Mode, "interval": m.cfg.Interval, "pending_notifications": len(s.Pending())}
+		return map[string]any{"mode": m.cfg.Mode, "interval": m.cfg.Interval, "timezone": m.cfg.timezone(), "pending_notifications": len(s.Pending())}
 	})
 	c.Handle(proto.TypePasswordQuery, func(server string, _ proto.Message) { m.send(c, server) })
 	c.Handle(proto.TypePasswordRestart, func(server string, msg proto.Message) {
@@ -83,7 +84,7 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 		m.Log.Warn("password dictionary unavailable; retaining existing assignments")
 	}
 	cancel()
-	m.Log.Info("password rotation active", "mode", m.cfg.Mode, "interval", m.cfg.Interval)
+	m.Log.Info("password rotation active", "mode", m.cfg.Mode, "schedule", m.cfg.scheduleLabel())
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	// Retry a saved notification after a daemon restart, including first generation.
@@ -139,7 +140,7 @@ func (m *Module) notify(ctx context.Context, c *core.Core) {
 		}
 		err := m.store.deliver(key, time.Now(), func(r Record) error {
 			st, _ := c.State(server)
-			n := core.Notice{Kind: core.NoticePasswordGenerated, Container: server, Server: st.Name, Time: r.GeneratedAt, Fields: map[string]any{"password": r.Password, "mode": m.cfg.Mode, "interval": m.cfg.Interval, "next_at": r.NextAt.Format(time.RFC3339)}}
+			n := core.Notice{Kind: core.NoticePasswordGenerated, Container: server, Server: st.Name, Time: r.GeneratedAt, Fields: map[string]any{"password": r.Password, "mode": m.cfg.Mode, "interval": m.cfg.scheduleLabel(), "next_at": r.NextAt.Format(time.RFC3339)}}
 			postCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
 			return alerts.Post(postCtx, m.HTTP, cfg, []core.Notice{n})
@@ -161,7 +162,7 @@ func (m *Module) Doctor(ctx context.Context, c *core.Core) []doctor.Check {
 	if _, err := readState(cfg.Dir + "/state.json"); err != nil {
 		return []doctor.Check{doctor.Failf("Passwords", "invalid saved state")}
 	}
-	out := []doctor.Check{doctor.Ok("Passwords", cfg.Mode+", "+cfg.Interval)}
+	out := []doctor.Check{doctor.Ok("Passwords", cfg.Mode+", "+cfg.scheduleLabel())}
 	a := alerts.Defaults()
 	a.Enabled = false
 	if c.Config("alerts", &a) != nil || !a.Enabled || a.Check() != nil {
@@ -203,6 +204,7 @@ func (m *Module) PrintStatus(w io.Writer, _ *core.Core, st core.Status) {
 	var data struct {
 		Mode     string
 		Interval string
+		Timezone string
 		Pending  int `json:"pending_notifications"`
 	}
 	if json.Unmarshal(st.Module[m.Name()], &data) != nil {
@@ -210,7 +212,7 @@ func (m *Module) PrintStatus(w io.Writer, _ *core.Core, st core.Status) {
 	}
 	ui.Section(w, "Join passwords")
 	ui.KV(w, "mode", data.Mode)
-	ui.KV(w, "regeneration", data.Interval)
+	ui.KV(w, "regeneration", (Config{Interval: data.Interval, Timezone: data.Timezone}).scheduleLabel())
 	ui.KV(w, "pending Discord messages", fmt.Sprint(data.Pending))
 }
 

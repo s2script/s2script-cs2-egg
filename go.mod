@@ -7,6 +7,7 @@ require (
 	github.com/google/nftables v0.3.0
 	github.com/moby/moby/api v1.56.0
 	github.com/moby/moby/client v0.6.0
+	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/sys v0.48.0
 )
 

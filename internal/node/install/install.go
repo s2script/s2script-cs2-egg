@@ -211,7 +211,7 @@ func Run(opts Options, modules []module.Module) error {
 	}
 
 	// welcome
-	fmt.Fprintln(out)
+	ui.InstallerBanner(out)
 	fmt.Fprintf(out, "%s  -  Installer\n", ui.Bold("  S2Script CS2 node"))
 	fmt.Fprintf(out, "  %s\n\n", ui.Gray("github.com/s2script/s2script-cs2-egg"))
 	for _, m := range modules {

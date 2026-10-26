@@ -127,7 +127,7 @@ func (s *Store) Get(server string, now time.Time) (Record, bool, error) {
 	if p == "" {
 		return old, false, errors.New("could not generate a distinct password")
 	}
-	next, err := Next(now, s.cfg.Interval)
+	next, err := s.cfg.Next(now)
 	if err != nil {
 		return old, false, err
 	}
