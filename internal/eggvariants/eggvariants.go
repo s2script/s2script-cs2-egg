@@ -50,6 +50,7 @@ type egg struct {
 	Name         string          `json:"name"`
 	Author       string          `json:"author"`
 	Description  string          `json:"description"`
+	Icon         json.RawMessage `json:"icon,omitempty"`
 	Features     json.RawMessage `json:"features"`
 	DockerImages json.RawMessage `json:"docker_images"`
 	FileDenylist json.RawMessage `json:"file_denylist"`

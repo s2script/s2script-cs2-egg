@@ -40,6 +40,17 @@ Start it. The first start installs CS2, Metamod, S2Script and the selected addon
 
 Prefer a standalone server? Skip step 1; everything installs into its own volume. There is also a [standalone egg](pterodactyl/s2script-cs2-egg-standalone.json).
 
+Both exports include the supplied Source2Script mark as an embedded PNG for the
+Pelican egg list. Import or update the egg to load the artwork. The original
+[egg PNG](pterodactyl/s2script-cs2-egg.png) is also provided for manual uploads.
+Stock Pterodactyl does not import egg icons; panels with an icon/theme extension
+can use that PNG. The exports remain in the compatible `PTDL_v2` format.
+
+For scheduled join-password decay, enable the node's **passwords** module and
+set its cron schedule and timezone, then enable **Rotating Join Password** on
+participating servers. See [password schedules](docs/modules/passwords.md) for
+examples, existing-config behavior and restart timing.
+
 ## 3. Choose addons and plugins
 
 | Panel variable | Default | Purpose |

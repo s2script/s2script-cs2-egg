@@ -18,6 +18,7 @@ const fixture = `{
   "name": "Test Egg",
   "author": "a@b.c",
   "description": "desc",
+  "icon": "data:image/png;base64,iVBORw0KGgo=",
   "features": [],
   "docker_images": {"x": "y"},
   "file_denylist": [],
@@ -76,7 +77,7 @@ func TestStandaloneLeavesEverythingElseUntouched(t *testing.T) {
 	json.Unmarshal([]byte(fixture), &src)
 	json.Unmarshal(out, &got)
 	// meta and uuid deliberately change, checked in TestStandaloneDropsOnlyNodeOnlyVariables
-	for _, k := range []string{"_comment", "exported_at", "author", "description", "features", "docker_images", "file_denylist", "startup", "config", "scripts"} {
+	for _, k := range []string{"_comment", "exported_at", "author", "description", "icon", "features", "docker_images", "file_denylist", "startup", "config", "scripts"} {
 		gv, err1 := json.Marshal(got[k])
 		sv, err2 := json.Marshal(src[k])
 		if err1 != nil || err2 != nil || string(gv) != string(sv) {

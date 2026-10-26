@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Show S2Script and EdgeGamers terminal artwork at the start of the node installer wizard.
+- Support five-field cron password decay schedules with named timezones while preserving legacy intervals and saved deadlines.
+- Embed the supplied Source2Script PNG in both egg exports for Pelican list artwork and provide the original PNG alongside them.
 - Use S2Script's native `addons/s2script/plugins.json` exclusively, preserve native registry files, and remove the old egg registry manager and its startup controls.
 - Sync the upstream baseline to K4ryuu CS2-Egg-Go v1.1.0 (e5815ae), including v1.0.5.
 - Verify ordinary shared game files before startup, even when VPK links remain valid.

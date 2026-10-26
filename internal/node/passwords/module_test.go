@@ -180,6 +180,8 @@ func TestRotationRestartUsesOnlyItsEnrolledSocketServer(t *testing.T) {
 
 func TestDiscordFirstRotationRetryAndRestart(t *testing.T) {
 	cfg := testConfig(t, "shared")
+	cfg.Interval = "0 4 * * *"
+	cfg.Timezone = "America/Chicago"
 	s, _ := Open(cfg)
 	now := time.Now()
 	a, _, _ := s.Get("one", now)
@@ -227,6 +229,9 @@ func TestDiscordFirstRotationRetryAndRestart(t *testing.T) {
 	defer mu.Unlock()
 	if len(bodies) != 3 || !strings.Contains(bodies[1], a.Password) || !strings.Contains(bodies[2], b.Password) {
 		t.Fatal("first/retry/rotation posts missing or duplicated")
+	}
+	if !strings.Contains(bodies[1], "0 4 * * * (America/Chicago)") {
+		t.Fatal("notification omitted the cron timezone")
 	}
 	if strings.Contains(logbuf.String(), a.Password) {
 		t.Fatal("webhook failure leaked credential")
