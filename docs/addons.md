@@ -15,6 +15,28 @@ S2Script and both native addons automatically require Metamod. No other scriptin
 
 The 18 `S2SCRIPT_PLUGIN_*` panel switches accept `default`, `1`, or `0`. `default` preserves policy and existing placement. Explicit `1` enables a bundled package; `0` disables it. When a bundled plugin is also a dependency in the native manifest, explicit switches update its `disabled` entry so the runtime keeps that choice. Updates preserve configs/data, private packages, and disabled choices. Duplicate active/disabled identities are errors.
 
+## Custom translations
+
+Edit phrase catalogs under `game/csgo/addons/s2script/translations/`, relative
+to the server root. Root catalogs such as `common.phrases.json` customize the
+default wording; language catalogs such as `ru/common.phrases.json` customize
+that language. Each file is a flat JSON object mapping phrase keys to strings.
+
+During framework updates, the egg adds missing keys from the corresponding
+release catalog while keeping all existing values, including empty strings,
+custom phrases and keys removed upstream. New catalogs are installed normally.
+Language catalogs are merged only with the same language's release file; English
+phrases are not inserted into other languages. Custom-only files are left alone.
+Catalogs with no new keys keep their existing bytes and modification time.
+
+Merging new keys reformats that catalog as indented JSON and retains its file
+permissions. Each catalog is replaced atomically after a successful write, so a
+failed copy leaves the original in place. Invalid JSON, non-string phrase values,
+or an unsafe matching destination stop the update before installed framework files
+are changed; the error identifies the catalog to fix. Keep positional placeholders such as `{1}`
+intact when customizing wording. Restart or reload the plugin after editing a
+deployed catalog so S2Script reads it again.
+
 ## Native plugin registry
 
 S2Script's native server manifest is `game/csgo/addons/s2script/plugins.json`, relative to the server root (`$HOME`, normally `/home/container`). Its companion `plugins-lock.json` belongs to S2Script. The egg preserves both files during framework updates. When a panel switch moves a native-owned bundled package, the egg relocates its lock entry only after verifying identity, version and integrity. Registry-managed bundled packages are updated by S2Script rather than overwritten from framework releases.
