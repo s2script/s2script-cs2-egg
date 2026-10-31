@@ -67,7 +67,7 @@ func IsTransientReleaseError(err error) bool {
 }
 
 // UpdateS2Script refreshes framework files and bundled plugins while keeping
-// operator configuration, data and the placement of installed plugins.
+// operator configuration, data, translation wording and installed plugin placement.
 func (e *Env) UpdateS2Script(ctx context.Context, options S2ScriptOptions) error {
 	want := strings.TrimSpace(options.Version)
 	exact := want != "" && want != "latest"
@@ -348,8 +348,8 @@ func (e *Env) installS2Script(stage, version, revision string) error {
 		}
 	}
 	type update struct {
-		source, target   string
-		preserve, plugin bool
+		source, target                string
+		preserve, plugin, translation bool
 	}
 	var writes []update
 	bundled := map[string]bool{}
@@ -420,7 +420,10 @@ func (e *Env) installS2Script(stage, version, revision string) error {
 				return fmt.Errorf("bundled S2Script plugin %s would overwrite a different installed identity", id)
 			}
 		}
-		writes = append(writes, update{p, rel, preserve, plugin})
+		writes = append(writes, update{
+			source: p, target: rel, preserve: preserve, plugin: plugin,
+			translation: strings.HasPrefix(rel, "addons/s2script/translations/") && strings.HasSuffix(rel, ".phrases.json"),
+		})
 		return nil
 	})
 	if err != nil {
@@ -431,9 +434,17 @@ func (e *Env) installS2Script(stage, version, revision string) error {
 		return err
 	}
 	defer root.Close()
-	for _, file := range writes {
+	for i := range writes {
+		file := &writes[i]
 		if err := s2scriptCheckParents(root, file.target); err != nil {
 			return err
+		}
+		if file.translation {
+			skip, err := s2scriptMergeTranslations(root, file.target, file.source)
+			if err != nil {
+				return err
+			}
+			file.preserve = skip
 		}
 	}
 	verifiedPlugins := map[string]string{}
@@ -456,7 +467,11 @@ func (e *Env) installS2Script(stage, version, revision string) error {
 		info, err := in.Stat()
 		hash := sha256.New()
 		if err == nil {
-			err = writeFile(root, file.target, io.TeeReader(in, hash), info.Mode())
+			if file.translation {
+				err = s2scriptWriteTranslation(root, file.target, in, info.Mode())
+			} else {
+				err = writeFile(root, file.target, io.TeeReader(in, hash), info.Mode())
+			}
 		}
 		in.Close()
 		if err != nil {

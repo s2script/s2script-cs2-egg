@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Merge newly shipped translation phrases during S2Script framework updates while preserving custom wording, keys, and language catalogs.
 - Show S2Script and EdgeGamers terminal artwork at the start of the node installer wizard.
 - Support five-field cron password decay schedules with named timezones while preserving legacy intervals and saved deadlines.
 - Embed the supplied Source2Script PNG in both egg exports for Pelican list artwork and provide the original PNG alongside them.
