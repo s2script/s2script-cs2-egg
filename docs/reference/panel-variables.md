@@ -38,7 +38,7 @@ Metamod, S2Script, MultiAddonManager and GameFixes default to enabled. Each sele
 | `MULTIADDONMANAGER_VERSION` | empty | Optional exact release tag |
 | `INSTALL_GAMEFIXES` | `1` | GameFixes downloader |
 | `GAMEFIXES_VERSION` | empty | Optional exact release tag |
-| `PRERELEASE` | `0` | Include prereleases for Metamod/native lookups |
+| `PRERELEASE` | `0` | Include prereleases for native addons; Metamod always uses prereleases |
 | 18 `S2SCRIPT_PLUGIN_*` switches | `default` | Preserve choices, `1` enable, `0` disable |
 
 Exact switch names are in the egg. See [addons and plugin commands](../addons.md) and [node addon cache](../modules/addon-cache.md).

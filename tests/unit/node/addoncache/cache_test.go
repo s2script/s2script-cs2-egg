@@ -4,6 +4,7 @@ package addoncache_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,6 +18,73 @@ import (
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/addoncache"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/core"
 )
+
+func TestMetamodCacheRejectsStableReleases(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		stale   bool
+		limited bool
+	}{
+		{"fresh", false, false},
+		{"stale", true, false},
+		{"fresh and rate limited", false, true},
+		{"stale and rate limited", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.limited {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+				if r.URL.Path != "/repos/"+addons.RepoMetamod+"/releases" {
+					http.NotFound(w, r)
+					return
+				}
+				w.Write([]byte(`[{"tag_name":"2.0.0","prerelease":true}]`))
+			}))
+			defer srv.Close()
+			old := addons.APIBase
+			addons.APIBase = srv.URL
+			t.Cleanup(func() { addons.APIBase = old })
+
+			now := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
+			fetched := now
+			if tc.stale {
+				fetched = now.Add(-2 * time.Hour)
+			}
+			data, err := json.Marshal(map[string]any{
+				"fetched": fetched,
+				"release": addons.Release{Tag: "1.12.0", Prerelease: false},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, prerelease := range []bool{false, true} {
+				c := addoncache.Open(t.TempDir(), srv.Client(), time.Hour)
+				c.Now = func() time.Time { return now }
+				dir := filepath.Join(c.Dir, "releases")
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				for _, kind := range []string{"latest", "pre"} {
+					if err := os.WriteFile(filepath.Join(dir, "alliedmodders__metamod-source__"+kind+".json"), data, 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				rel, err := c.Release(context.Background(), addons.RepoMetamod, prerelease)
+				if tc.limited {
+					if err == nil || rel != nil {
+						t.Fatalf("prerelease=%v: must not serve cached Source 1 release: %+v, %v", prerelease, rel, err)
+					}
+					continue
+				}
+				if err != nil || rel == nil || !rel.Prerelease || rel.Tag != "2.0.0" {
+					t.Fatalf("prerelease=%v: want refreshed Source 2 prerelease: %+v, %v", prerelease, rel, err)
+				}
+			}
+		})
+	}
+}
 
 func TestReleaseIsFetchedOncePerRefreshAndStaleServesOnRateLimit(t *testing.T) {
 	var calls int32

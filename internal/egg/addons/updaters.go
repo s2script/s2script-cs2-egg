@@ -51,6 +51,8 @@ func (e *Env) release(ctx context.Context, label, repo string, prerelease bool) 
 			return nil, errors.New("pinned version unavailable")
 		case r.Err != "":
 			e.Log.Logf(logx.Debug, "Node cache has no release for %s (%s), asking GitHub", repo, r.Err)
+		case repo == RepoMetamod && !r.Pinned && !r.Prerelease:
+			e.Log.Log(logx.Debug, "Node cache returned a stable Metamod release, asking GitHub for a Source 2 prerelease")
 		case r.Tag != "":
 			if r.Pinned {
 				e.Log.Logf(logx.Info, "%s is pinned to %s by the node", label, r.Tag)

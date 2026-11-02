@@ -19,6 +19,7 @@ import (
 
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/addons"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/logx"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/proto"
 )
 
 func TestFetchReleaseStableAndPrereleaseShapes(t *testing.T) {
@@ -28,6 +29,8 @@ func TestFetchReleaseStableAndPrereleaseShapes(t *testing.T) {
 			w.Write([]byte(`{"tag_name":"v1.0.335","prerelease":false,"assets":[{"name":"x-with-runtime-linux-x64.zip","browser_download_url":"http://dl/x.zip"}]}`))
 		case "/repos/a/b/releases":
 			w.Write([]byte(`[{"tag_name":"2.0.0","prerelease":true,"assets":[{"name":"mmsource-2.0.0-git1391-linux.tar.gz","browser_download_url":"http://dl/mm.tgz"},{"name":"mmsource-2.0.0-git1391-windows.zip","browser_download_url":"http://dl/mm.zip"}]}]`))
+		case "/repos/stable-first/x/releases":
+			w.Write([]byte(`[{"tag_name":"v2.0.0","prerelease":false},{"tag_name":"v2.0.0-rc.1","prerelease":true}]`))
 		case "/repos/limited/x/releases/latest":
 			w.WriteHeader(403)
 		default:
@@ -59,11 +62,59 @@ func TestFetchReleaseStableAndPrereleaseShapes(t *testing.T) {
 		t.Fatalf("metamod version from asset name: %s", a.Name)
 	}
 
+	rel, err = addons.FetchRelease(ctx, srv.Client(), "stable-first/x", true)
+	if err != nil || rel.Tag != "v2.0.0" || rel.Prerelease {
+		t.Fatalf("other repos still include stable releases on the prerelease channel: %v %+v", err, rel)
+	}
+
 	if _, err := addons.FetchRelease(ctx, srv.Client(), "limited/x", false); !errors.Is(err, addons.ErrRateLimited) {
 		t.Fatalf("403 must be ErrRateLimited, got %v", err)
 	}
 	if _, err := addons.FetchRelease(ctx, srv.Client(), "gone/x", false); err == nil || errors.Is(err, addons.ErrRateLimited) {
 		t.Fatalf("504 must be a plain error, got %v", err)
+	}
+}
+
+func TestFetchReleaseMetamodOnlySelectsPrereleases(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		releases string
+		wantErr  bool
+	}{
+		{"stable before prereleases", `[
+			{"tag_name":"1.12.0","prerelease":false},
+			{"tag_name":"2.0.0","prerelease":true,"assets":[{"name":"mmsource-2.0.0-git1391-linux.tar.gz","browser_download_url":"http://dl/mm.tgz"}]},
+			{"tag_name":"2.0.0-old","prerelease":true}
+		]`, false},
+		{"stable releases only", `[{"tag_name":"1.12.0","prerelease":false}]`, true},
+		{"no releases", `[]`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/repos/"+addons.RepoMetamod+"/releases" {
+					http.NotFound(w, r)
+					return
+				}
+				w.Write([]byte(tc.releases))
+			}))
+			defer srv.Close()
+			old := addons.APIBase
+			addons.APIBase = srv.URL
+			t.Cleanup(func() { addons.APIBase = old })
+
+			for _, prerelease := range []bool{false, true} {
+				rel, err := addons.FetchRelease(context.Background(), srv.Client(), addons.RepoMetamod, prerelease)
+				if tc.wantErr {
+					if err == nil || rel != nil {
+						t.Fatalf("prerelease=%v: must refuse Source 1 releases: %+v, %v", prerelease, rel, err)
+					}
+					continue
+				}
+				if err != nil || rel == nil || !rel.Prerelease || rel.Tag != "2.0.0" {
+					t.Fatalf("prerelease=%v: want newest Source 2 prerelease: %+v, %v", prerelease, rel, err)
+				}
+			}
+		})
 	}
 }
 
@@ -327,7 +378,10 @@ func TestMetamodUpdaterEndToEnd(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/repos/alliedmodders/metamod-source/releases":
-			w.Write([]byte(`[{"tag_name":"2.0.0","prerelease":true,"assets":[{"name":"mmsource-2.0.0-git1391-linux.tar.gz","browser_download_url":"` + addons.APIBase + `/dl/mm.tgz"}]}]`))
+			w.Write([]byte(`[
+				{"tag_name":"1.12.0","prerelease":false,"assets":[{"name":"mmsource-1.12.0-git2000-linux.tar.gz","browser_download_url":"` + addons.APIBase + `/dl/source1.tgz"}]},
+				{"tag_name":"2.0.0","prerelease":true,"assets":[{"name":"mmsource-2.0.0-git1391-linux.tar.gz","browser_download_url":"` + addons.APIBase + `/dl/mm.tgz"}]}
+			]`))
 		case r.URL.Path == "/dl/mm.tgz":
 			var buf bytes.Buffer
 			gz := gzip.NewWriter(&buf)
@@ -377,6 +431,18 @@ func TestMetamodUpdaterEndToEnd(t *testing.T) {
 	env.UpdateAll(context.Background(), addons.Selection{Metamod: true}, false)
 	if !strings.Contains(out.String(), "Metamod is up-to-date (git1391)") {
 		t.Fatalf("second run must be up-to-date: %s", out.String())
+	}
+	// An older node may still answer with the newest Source 1 stable release.
+	out.Reset()
+	env.Node = func(q *proto.AddonQuery) *proto.AddonRelease {
+		return &proto.AddonRelease{
+			Tag: "1.12.0", Prerelease: false,
+			Assets: []proto.AddonAsset{{Name: "mmsource-1.12.0-git2000-linux.tar.gz", URL: api.URL + "/dl/source1.tgz"}},
+		}
+	}
+	env.UpdateAll(context.Background(), addons.Selection{Metamod: true}, false)
+	if !strings.Contains(out.String(), "Metamod is up-to-date (git1391)") {
+		t.Fatalf("stable node reply must fall back to the GitHub prerelease: %s", out.String())
 	}
 }
 
