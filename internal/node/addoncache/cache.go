@@ -57,10 +57,17 @@ func (c *Cache) releasePath(repo string, prerelease bool) string {
 // Release returns the repo's release, from disk while fresh, else from
 // GitHub; when GitHub fails (rate limit) a stale copy still answers.
 func (c *Cache) Release(ctx context.Context, repo string, prerelease bool) (*addons.Release, error) {
+	if repo == addons.RepoMetamod {
+		prerelease = true
+	}
 	path := c.releasePath(repo, prerelease)
 	var have cachedRelease
 	if data, err := os.ReadFile(path); err == nil {
 		json.Unmarshal(data, &have)
+	}
+	// Older selectors could cache a Source 1 release, even in the pre slot.
+	if repo == addons.RepoMetamod && have.Release != nil && !have.Release.Prerelease {
+		have.Release = nil
 	}
 	now := c.Now()
 	if have.Release != nil && now.Sub(have.Fetched) < c.Refresh {

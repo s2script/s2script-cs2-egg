@@ -104,12 +104,21 @@ func get(ctx context.Context, client *http.Client, url, repo string) ([]byte, er
 }
 
 // FetchRelease returns the latest stable release, or with prerelease the
-// newest release of any kind (first element of /releases).
+// newest release of any kind (first element of /releases). Metamod always
+// selects the newest prerelease: its stable releases target Source 1.
 func FetchRelease(ctx context.Context, client *http.Client, repo string, prerelease bool) (*Release, error) {
-	if prerelease {
+	if prerelease || repo == RepoMetamod {
 		list, err := FetchReleases(ctx, client, repo)
 		if err != nil {
 			return nil, err
+		}
+		if repo == RepoMetamod {
+			for i := range list {
+				if list[i].Prerelease {
+					return &list[i], nil
+				}
+			}
+			return nil, fmt.Errorf("no prerelease found for %s", repo)
 		}
 		return &list[0], nil
 	}

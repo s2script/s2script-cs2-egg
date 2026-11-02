@@ -9,6 +9,8 @@
 
 S2Script and both native addons automatically require Metamod. No other scripting framework is installed. Native downloaders select Linux/SteamRT3 archives and preserve private configs. Downloads are staged and checked before installation. S2Script requires the publisher's SHA-256 digest; native addons verify a digest when supplied.
 
+Automatic Metamod updates always select the newest Source 2 prerelease, regardless of `PRERELEASE`. Stable Metamod releases target Source 1 and are excluded from automatic selection.
+
 `S2SCRIPT_CHANNEL=stable` follows stable framework releases; `prerelease` includes prereleases. This is separate from image/node channels. Exact framework tags constrain selection; registry plugin versions belong in native dependencies. Temporary service failures may retain a verified compatible install; missing/corrupt files and incompatible policy still fail visibly.
 
 ## Bundled plugins
