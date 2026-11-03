@@ -59,6 +59,17 @@ Exact switch names are in the egg. See [addons and plugin commands](../addons.md
 
 ## Development
 
+Connection diagnostics are admin-only and available in both egg variants:
+
+| Variable | Default | What it does |
+|---|---|---|
+| `ENABLE_CONNECTION_TRACE` | `0` | Opt in to a bounded read-only trace after restarting |
+| `CONNECTION_TRACE_IP` | empty | One client source IP as seen by CS2; required when tracing |
+| `CONNECTION_TRACE_SECONDS` | `600` | Capture window, 60–1800 seconds; restart renews it while enabled |
+
+See [connection tracing](../modules/connection-trace.md) for comparison steps,
+redaction scope and limits of node traffic evidence. It does not enable Guard.
+
 | Variable | Default | What it does |
 |---|---|---|
 | `GDB_DEBUG_PORT` | empty | Runs the server under `gdbserver` on that port for remote debugging. Costs 5 to 10 percent performance. Allocate the port in the panel first |

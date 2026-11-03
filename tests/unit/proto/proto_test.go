@@ -30,6 +30,8 @@ func roundTrip(t *testing.T, m proto.Message) proto.Message {
 
 func TestEveryMessageRoundTrips(t *testing.T) {
 	msgs := []proto.Message{
+		&proto.ConnectionTraceQuery{IP: "203.0.113.7"},
+		&proto.ConnectionTraceSample{IP: "203.0.113.7", Status: "sampled", SampledAt: "2026-10-22T18:00:00Z", Present: true, Packets: 12, Bytes: 600},
 		&proto.PasswordQuery{},
 		&proto.PasswordUpdate{Password: "lantern-meadow-copper", NextAt: "2026-11-15T12:00:00Z"},
 		&proto.PasswordRestart{NextAt: "2026-11-15T12:00:00Z"},

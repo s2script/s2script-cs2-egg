@@ -20,22 +20,24 @@ const Version = 1
 type Type string
 
 const (
-	TypeHello           Type = "hello"
-	TypePasswordQuery   Type = "password.query"
-	TypePasswordUpdate  Type = "password.update"
-	TypePasswordRestart Type = "password.restart"
-	TypeVpkStatus       Type = "vpk.status"
-	TypeGuardBlock      Type = "guard.block"
-	TypeGuardHit        Type = "guard.hit"
-	TypeGuardEvent      Type = "guard.ev"
-	TypeServerState     Type = "server.state"
-	TypeConsoleExec     Type = "console.exec"
-	TypeCrash           Type = "egg.crash"
-	TypeAddonQuery      Type = "addon.query"
-	TypeAddonRelease    Type = "addon.release"
-	TypeWorkshopSync    Type = "workshop.sync"
-	TypeWorkshopReady   Type = "workshop.ready"
-	TypeLogLine         Type = "log.line"
+	TypeHello                 Type = "hello"
+	TypePasswordQuery         Type = "password.query"
+	TypePasswordUpdate        Type = "password.update"
+	TypePasswordRestart       Type = "password.restart"
+	TypeVpkStatus             Type = "vpk.status"
+	TypeGuardBlock            Type = "guard.block"
+	TypeGuardHit              Type = "guard.hit"
+	TypeGuardEvent            Type = "guard.ev"
+	TypeServerState           Type = "server.state"
+	TypeConsoleExec           Type = "console.exec"
+	TypeCrash                 Type = "egg.crash"
+	TypeAddonQuery            Type = "addon.query"
+	TypeAddonRelease          Type = "addon.release"
+	TypeWorkshopSync          Type = "workshop.sync"
+	TypeWorkshopReady         Type = "workshop.ready"
+	TypeLogLine               Type = "log.line"
+	TypeConnectionTraceQuery  Type = "connection.trace.query"
+	TypeConnectionTraceSample Type = "connection.trace.sample"
 )
 
 // vpk.status states, in the order a push goes through them
@@ -92,6 +94,27 @@ type GuardInfo struct {
 	Enabled bool   `json:"enabled"`
 	Action  string `json:"action"` // log | kick | block
 }
+
+// ConnectionTraceQuery asks only for the existing cached source-IP counters.
+// No packet capture, firewall operation, or Guard lifecycle event is requested.
+type ConnectionTraceQuery struct {
+	IP string `json:"ip"`
+}
+
+// ConnectionTraceSample is source-wide evidence across all protected game
+// ports. Present=false means not observed in this sample, not zero traffic.
+// Status is sampled or unavailable; stale/failed samplers are unavailable.
+type ConnectionTraceSample struct {
+	IP        string `json:"ip"`
+	Status    string `json:"status"`
+	SampledAt string `json:"sampled_at,omitempty"`
+	Present   bool   `json:"present"`
+	Packets   uint64 `json:"packets,omitempty"`
+	Bytes     uint64 `json:"bytes,omitempty"`
+}
+
+func (*ConnectionTraceQuery) Type() Type  { return TypeConnectionTraceQuery }
+func (*ConnectionTraceSample) Type() Type { return TypeConnectionTraceSample }
 
 // VpkStatus is the node's progress on this container's VPK files.
 type VpkStatus struct {
@@ -258,6 +281,10 @@ func Decode(line []byte) (Message, error) {
 	}
 	var m Message
 	switch env.T {
+	case TypeConnectionTraceQuery:
+		m = &ConnectionTraceQuery{}
+	case TypeConnectionTraceSample:
+		m = &ConnectionTraceSample{}
 	case TypePasswordQuery:
 		m = &PasswordQuery{}
 	case TypePasswordUpdate:

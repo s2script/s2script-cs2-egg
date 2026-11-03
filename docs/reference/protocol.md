@@ -11,6 +11,18 @@ The node listens, the egg connects. A live connection is the only presence signa
 
 ## The envelope
 
+Optional diagnostic messages reuse this socket and envelope version:
+
+- `connection.trace.query`: egg to node, `{ "ip": "203.0.113.7" }`.
+- `connection.trace.sample`: node to the requesting egg, `ip`, `status`
+  (`sampled` or `unavailable`), `sampled_at` (UTC RFC3339Nano), `present`,
+  `packets`, and `bytes`. Zero counters and absent timestamps may be omitted.
+
+The already-running Guard module answers from its cache only, without firewall
+operations. Counters are source-wide UDP evidence across protected ports, never
+attempt-specific. Unknown types are ignored by older peers. Neither message is a
+Guard hit/join/chat event. See [connection tracing](../modules/connection-trace.md).
+
 ```json
 {"t": "vpk.status", "v": 1, "d": {"state": "done"}}
 ```

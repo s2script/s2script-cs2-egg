@@ -21,6 +21,7 @@ import (
 	"github.com/K4ryuu/CS2-Egg-Go/internal/cleanup"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/addons"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/configs"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/conntrace"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/console"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/guard"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/nodeclient"
@@ -240,8 +241,22 @@ func Run(ctx context.Context, env Env) int {
 		log.Logf(logx.Success, "Console filter active: %d patterns (%d exact, %d contains)", e+c, e, c)
 	}
 	var g *guard.Guard
+	trace, traceErr := conntrace.FromEnv(env.Getenv)
+	if traceErr != nil {
+		log.Logf(logx.Warning, "Connection tracing disabled: %v", traceErr)
+	}
+	flushTrace := func() {
+		for _, event := range trace.Drain() {
+			log.Log(logx.Info, event.Line())
+		}
+	}
 	var nodeSink *NodeLogSink
 	link := &nodeLink{client: node, path: filepath.Join(eggDir, nodeclient.SocketName), hello: nodeHello(env)}
+	queryTrace := func() {
+		if q := trace.Query(); q != nil && link.hasModule("guard") {
+			link.send(q)
+		}
+	}
 	if env.flag("ENABLE_LOG_FILES") {
 		if link.hasModule("consolelog") {
 			nodeSink = NewNodeLogSink(ctx, link.send)
@@ -297,6 +312,8 @@ func Run(ctx context.Context, env Env) int {
 	}
 	link.onConnect = func() { sendState(); requestPassword() }
 	sendState()
+	queryTrace()
+	flushTrace()
 	go func() {
 		t := time.NewTicker(StateHeartbeat)
 		defer t.Stop()
@@ -306,6 +323,9 @@ func Run(ctx context.Context, env Env) int {
 			case <-ctx.Done():
 				return
 			case <-t.C:
+				trace.Tick()
+				flushTrace()
+				queryTrace()
 				sendState()
 				requestPassword()
 				if nodeSink != nil {
@@ -351,6 +371,7 @@ func Run(ctx context.Context, env Env) int {
 		if !ask.handle(line) || typed.swallow(line) {
 			return // our own answer or the echo we already printed
 		}
+		trace.Feed(line)
 		if g == nil || g.Inspect(line) {
 			pipeline.Handle(line)
 		}
@@ -362,7 +383,10 @@ func Run(ctx context.Context, env Env) int {
 	// commands to the server
 	go link.receive(ctx, func(m proto.Message) {
 		switch x := m.(type) {
+		case *proto.ConnectionTraceSample:
+			trace.Network(x)
 		case *proto.GuardBlock:
+			trace.Block(x)
 			if g != nil {
 				g.HostNotice(x)
 			}
@@ -379,6 +403,8 @@ func Run(ctx context.Context, env Env) int {
 		}
 	})
 	err = srv.Run(ctx)
+	trace.Close()
+	flushTrace()
 	w.SetUp(false)
 	log.Log(logx.Info, "Server stopped")
 	var exitErr *exec.ExitError
