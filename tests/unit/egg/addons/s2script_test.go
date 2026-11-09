@@ -186,6 +186,62 @@ func TestS2ScriptRejectsUnknownHostAPIBeforeInstalledWrites(t *testing.T) {
 	}
 }
 
+func TestS2ScriptRegistersNewBundledPlugins(t *testing.T) {
+	for _, plugin := range []struct {
+		name, path string
+	}{
+		{"@s2script/workshopmaps", "addons/s2script/plugins/_s2script_workshopmaps.s2sp"},
+		{"@s2script/mapchooser", "addons/s2script/plugins/disabled/_s2script_mapchooser.s2sp"},
+	} {
+		for _, interrupted := range []bool{false, true} {
+			name := plugin.name + "/fresh"
+			if interrupted {
+				name = plugin.name + "/interrupted"
+			}
+			t.Run(name, func(t *testing.T) {
+				files := s2files(t, "0.12.0")
+				files[plugin.path] = pluginZIP(t, plugin.name, "0.12.0")
+				e := s2fixture(t, s2zip(t, files), "0.12.0", "valid", "/latest", false)
+				if interrupted {
+					// A failed registration can leave copied packages without receipts.
+					s2write(t, e.Root, plugin.path, files[plugin.path])
+				}
+				if err := e.UpdateS2Script(context.Background(), addons.S2ScriptOptions{}); err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(s2read(t, e.Root, plugin.path), files[plugin.path]) {
+					t.Fatal("bundled plugin bytes or release placement changed")
+				}
+				if !addons.S2ScriptHostVerified(e.Root, "0.12.0") {
+					t.Fatal("release did not finish host registration")
+				}
+				data, err := os.ReadFile(filepath.Join(e.Root, "s2script-plugins.lock.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var lock struct {
+					Plugins []struct {
+						Name, Source, Verification string
+						Managed                    bool
+					}
+				}
+				if err := json.Unmarshal(data, &lock); err != nil {
+					t.Fatal(err)
+				}
+				recorded := false
+				for _, installed := range lock.Plugins {
+					if installed.Name == plugin.name {
+						recorded = installed.Managed && installed.Source == "release" && installed.Verification == "verified"
+					}
+				}
+				if !recorded {
+					t.Fatal("bundled plugin lacks verified release ownership")
+				}
+			})
+		}
+	}
+}
+
 func TestS2ScriptPreflightsInstalledPluginMetadataBeforeCopies(t *testing.T) {
 	for _, bad := range []string{"package", "lock"} {
 		t.Run(bad, func(t *testing.T) {
