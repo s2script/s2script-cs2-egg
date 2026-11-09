@@ -15,7 +15,7 @@ Automatic Metamod updates always select the newest Source 2 prerelease, regardle
 
 ## Bundled plugins
 
-The 18 `S2SCRIPT_PLUGIN_*` panel switches accept `default`, `1`, or `0`. `default` preserves policy and existing placement. Explicit `1` enables a bundled package; `0` disables it. When a bundled plugin is also a dependency in the native manifest, explicit switches update its `disabled` entry so the runtime keeps that choice. Updates preserve configs/data, private packages, and disabled choices. Duplicate active/disabled identities are errors.
+The 20 `S2SCRIPT_PLUGIN_*` panel switches accept `default`, `1`, or `0`. `default` preserves policy and existing placement. Explicit `1` enables a bundled package; `0` disables it. When a bundled plugin is also a dependency in the native manifest, explicit switches update its `disabled` entry so the runtime keeps that choice. Updates preserve configs/data, private packages, and disabled choices. Duplicate active/disabled identities are errors.
 
 ## Custom translations
 

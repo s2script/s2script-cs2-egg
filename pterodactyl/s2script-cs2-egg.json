@@ -461,9 +461,29 @@
             "field_type": "text"
         },
         {
+            "name": "@s2script/workshopmaps",
+            "description": "default preserves existing/policy placement; 0 disables, 1 enables. Release default: enabled.",
+            "env_variable": "S2SCRIPT_PLUGIN_WORKSHOPMAPS",
+            "default_value": "default",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|in:default,0,1",
+            "field_type": "text"
+        },
+        {
             "name": "@s2script/nominations",
             "description": "default preserves existing/policy placement; 0 disables, 1 enables. Release default: disabled.",
             "env_variable": "S2SCRIPT_PLUGIN_NOMINATIONS",
+            "default_value": "default",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|in:default,0,1",
+            "field_type": "text"
+        },
+        {
+            "name": "@s2script/mapchooser",
+            "description": "default preserves existing/policy placement; 0 disables, 1 enables. Release default: disabled.",
+            "env_variable": "S2SCRIPT_PLUGIN_MAPCHOOSER",
             "default_value": "default",
             "user_viewable": true,
             "user_editable": true,
