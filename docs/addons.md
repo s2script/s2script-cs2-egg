@@ -7,7 +7,11 @@
 | [MultiAddonManager](https://github.com/Source2ZE/MultiAddonManager) | `INSTALL_MULTIADDONMANAGER` | `MULTIADDONMANAGER_VERSION` |
 | [GameFixes](https://github.com/SlynxCZ/GameFixes_mm) | `INSTALL_GAMEFIXES` | `GAMEFIXES_VERSION` |
 
-S2Script and both native addons automatically require Metamod. No other scripting framework is installed. Native downloaders select Linux/SteamRT3 archives and preserve private configs. Downloads are staged and checked before installation. S2Script requires the publisher's SHA-256 digest; native addons verify a digest when supplied.
+S2Script and both native addons automatically require Metamod. No other scripting framework is installed. v2 runs on SteamRT4 and selects only MultiAddonManager's explicit `-steamrt4.tar.gz` archives. GameFixes publishes one Linux archive. Downloads are staged and checked before installation, preserving private configs and data. S2Script requires the publisher's SHA-256 digest; native addons verify a digest when supplied.
+
+Native installation receipts include the target runtime. The first v2 boot reinstalls selected native addons with legacy or different-runtime receipts, even at the same release tag. A MultiAddonManager pin without an RT4 asset fails startup; select a compatible release. A newer installed addon whose runtime cannot be verified also fails rather than silently downgrading: pin its exact version to repair it. Transient outages retain only installations whose files and RT4 receipts verify. See [upgrading to v2](upgrading.md#v200-steamrt4).
+
+Some S2Script releases, including v0.12.2, mark their shim as requiring an executable stack. Before launching the game, the egg inspects the installed ELF. When required, it adds glibc's documented `glibc.rtld.execstack=2` compatibility setting to the game launch environment and logs a warning. This permits an executable stack in the launch shell and descendants, as the affected plugin requests; publisher binaries and checksums remain intact. Other glibc tunables are preserved. Explicit conflicting execstack settings, or `glibc.rtld.enable_secure=1` which disables other tunables, stop startup with a repair instruction. A shim with a non-executable stack does not trigger this setting. See the [glibc documentation](https://sourceware.org/glibc/manual/latest/html_node/Dynamic-Linking-Tunables.html).
 
 Automatic Metamod updates always select the newest Source 2 prerelease, regardless of `PRERELEASE`. Stable Metamod releases target Source 1 and are excluded from automatic selection.
 

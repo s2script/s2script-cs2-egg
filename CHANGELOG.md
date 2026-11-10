@@ -18,6 +18,18 @@
 - Derive release versions from GitHub tags without requiring version/changelog edits.
 - Resolve node installation from stable/beta release metadata and default panel images to channels.
 
+## [2.0.0] - 2026-11-10
+
+- Move all v2 server images to SteamRT4 (Debian 13); stable and beta remain release channels.
+- Require explicit SteamRT4 MultiAddonManager archives and report incompatible version pins before starting CS2.
+- Bind native addon installation receipts to the target runtime and reinstall legacy installations at the same release version while preserving private configs and data.
+- Require verified RT4 evidence when retaining newer or offline native installations; reject unverified newer installs with an exact-pin repair instruction.
+- Enable glibc executable-stack compatibility only for game launches whose installed S2Script shim requests it, preserving publisher binaries and unrelated tunables; report explicit policy conflicts before launch.
+- Verify RT4 identity, i386 loader execution, startup tools and the unprivileged entrypoint in image CI and release checks.
+- Set the local build fallback to 2.0.0; published builds continue deriving their version from GitHub release tags.
+
+See [upgrade instructions](docs/upgrading.md#v200-steamrt4) for migration, pin requirements and rollback.
+
 ## [0.2.0-alpha.1] - 2026-10-13
 
 - Base S2Script CS2 Egg on K4ryuu CS2-Egg-Go at 70e8d88.

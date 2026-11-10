@@ -4,6 +4,8 @@ A downstream fork of [K4ryuu/CS2-Egg-Go](https://github.com/K4ryuu/CS2-Egg-Go) f
 
 Included: Metamod, the S2Script auto-updater and plugin manager, [MultiAddonManager](https://github.com/Source2ZE/MultiAddonManager), and [GameFixes](https://github.com/SlynxCZ/GameFixes_mm). CounterStrikeSharp, ModSharp and Swiftly installers are removed.
 
+**v2.0.0 runs on SteamRT4 only** (Debian 13 userspace). Existing servers migrate native addons on their first v2 startup while preserving private configs and data. Review the [v2 upgrade instructions](docs/upgrading.md#v200-steamrt4) before switching an existing server.
+
 Release versions come from the GitHub release tag. The installer selects the latest stable release and the egg defaults to `:stable`; no per-release edits to version files, installer defaults or egg exports are needed. Wait for the release workflow to succeed before installing. The legacy `:prerelease` image and independent node implementation are a different generation; see [migration notes](UPSTREAM.md).
 
 ## 1. Set up the node (optional)
@@ -74,4 +76,4 @@ GPL-3.0-or-later. Original code copyright Kőrösfalvi “K4ryuu” Martin; down
 
 In GitHub, create a release from the desired commit with a tag such as `v1.2.3`. Leave **Set as a pre-release** unchecked for stable; check it for testing releases such as `v1.3.0-rc.1`. Publish it and wait for Actions to finish. Actions builds both programs with that tag's version, attaches the node binary/checksum, and publishes the versioned image and eligible channel aliases.
 
-`VERSION` is only a local-development fallback. Neither it nor `CHANGELOG.md` must be edited to publish. The optional CLI equivalent is `./scripts/release.sh v1.2.3`.
+`VERSION` is only a local-development fallback, currently `2.0.0`. Neither it nor `CHANGELOG.md` must be edited to publish. The optional CLI equivalent for this release is `./scripts/release.sh v2.0.0`.

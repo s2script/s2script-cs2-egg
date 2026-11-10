@@ -34,7 +34,7 @@ Metamod, S2Script, MultiAddonManager and GameFixes default to enabled. Each sele
 | `INSTALL_S2SCRIPT` | `1` | Framework and plugin preparation |
 | `S2SCRIPT_CHANNEL` | `stable` | `stable` or `prerelease` framework releases |
 | `S2SCRIPT_VERSION` | empty | Optional exact framework tag |
-| `INSTALL_MULTIADDONMANAGER` | `1` | Linux SteamRT3 downloader |
+| `INSTALL_MULTIADDONMANAGER` | `1` | Linux SteamRT4 downloader |
 | `MULTIADDONMANAGER_VERSION` | empty | Optional exact release tag |
 | `INSTALL_GAMEFIXES` | `1` | GameFixes downloader |
 | `GAMEFIXES_VERSION` | empty | Optional exact release tag |

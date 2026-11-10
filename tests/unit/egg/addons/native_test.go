@@ -25,6 +25,7 @@ import (
 
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/addons"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/logx"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/proto"
 )
 
 type nativeFixture struct {
@@ -32,7 +33,7 @@ type nativeFixture struct {
 }
 
 var nativeFixtures = []nativeFixture{
-	{"Source2ZE/MultiAddonManager", "MultiAddonManager", "MultiAddonManager-v1.6.2-steamrt3.tar.gz", "addons/multiaddonmanager/bin/multiaddonmanager.so", "addons/metamod/multiaddonmanager.vdf", "addons/multiaddonmanager/bin/multiaddonmanager", "cfg/multiaddonmanager/multiaddonmanager.cfg"},
+	{"Source2ZE/MultiAddonManager", "MultiAddonManager", "MultiAddonManager-v1.6.2-steamrt4.tar.gz", "addons/multiaddonmanager/bin/multiaddonmanager.so", "addons/metamod/multiaddonmanager.vdf", "addons/multiaddonmanager/bin/multiaddonmanager", "cfg/multiaddonmanager/multiaddonmanager.cfg"},
 	{"SlynxCZ/GameFixes_mm", "GameFixes", "GameFixes_mm_v1.0.14-linux.tar.gz", "addons/game_fixes/bin/linuxsteamrt64/game_fixes.so", "addons/metamod/game_fixes.vdf", "addons/game_fixes/bin/linuxsteamrt64/game_fixes", "addons/game_fixes/game_fixes.ini"},
 }
 
@@ -110,11 +111,14 @@ func nativeServer(t *testing.T, e *addons.Env, f nativeFixture, archive []byte, 
 			return
 		}
 		assets := []map[string]string{
-			{"name": strings.Replace(f.name, "steamrt3", "steamrt4", 1) + ".windows.zip", "browser_download_url": srv.URL + "/wrong-platform"},
+			{"name": f.name + ".windows.zip", "browser_download_url": srv.URL + "/wrong-platform"},
 			{"name": f.name, "browser_download_url": srv.URL + "/asset", "digest": digest},
 		}
 		if f.key == "MultiAddonManager" {
-			assets = append([]map[string]string{{"name": strings.Replace(f.name, "steamrt3", "steamrt4", 1), "browser_download_url": srv.URL + "/wrong-runtime"}}, assets...)
+			assets = append([]map[string]string{
+				{"name": strings.Replace(f.name, "steamrt4", "steamrt3", 1), "browser_download_url": srv.URL + "/wrong-runtime"},
+				{"name": strings.Replace(f.name, "steamrt4", "linux", 1), "browser_download_url": srv.URL + "/legacy-runtime"},
+			}, assets...)
 		}
 		rel := map[string]any{"tag_name": tag, "prerelease": e.Prerelease, "assets": assets}
 		if wantEndpoint == "" {
@@ -240,9 +244,11 @@ func TestNativeLatestDoesNotDowngrade(t *testing.T) {
 	f := nativeFixtures[0]
 	e := nativeEnv(t)
 	csgo := filepath.Join(e.Root, "game", "csgo")
-	nativeWrite(t, csgo, f.binary, "installed newer binary")
-	nativeWrite(t, csgo, f.vdf, nativeFiles(f)[f.vdf])
-	if err := e.Versions.Set(f.key, "v9.0.0"); err != nil {
+	files := nativeFiles(f)
+	files[f.binary] = "installed newer binary"
+	archive := nativeTar(t, files)
+	nativeServer(t, e, f, archive, nativeDigest(archive), "latest", "v9.0.0")
+	if err := e.UpdateNative(context.Background(), nativeOptions(f, "latest")); err != nil {
 		t.Fatal(err)
 	}
 	nativeServer(t, e, f, []byte("invalid archive"), "sha256:invalid", "latest", "v1.6.2")
@@ -254,6 +260,174 @@ func TestNativeLatestDoesNotDowngrade(t *testing.T) {
 	}
 	if got := e.Versions.Get(f.key); got != "v9.0.0" {
 		t.Fatalf("version changed: %q", got)
+	}
+}
+
+func TestNativeRejectsUnverifiedNewerInstallWithoutDowngrading(t *testing.T) {
+	f := nativeFixtures[1]
+	e := nativeEnv(t)
+	csgo := filepath.Join(e.Root, "game", "csgo")
+	for name, body := range nativeFiles(f) {
+		nativeWrite(t, csgo, name, body)
+	}
+	if err := e.Versions.Set(f.key, "v9.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	nativeServer(t, e, f, []byte("must not install older release"), "", "latest", "v1.0.14")
+	if err := e.UpdateNative(context.Background(), nativeOptions(f, "latest")); err == nil || !strings.Contains(err.Error(), "pin") {
+		t.Fatalf("expected an actionable repair error for unverified newer install, got %v", err)
+	}
+	if got := e.Versions.Get(f.key); got != "v9.0.0" {
+		t.Fatalf("newer installation downgraded: %q", got)
+	}
+}
+
+func TestNativeMultiAddonManagerRequiresRT4AssetForExactPin(t *testing.T) {
+	f := nativeFixtures[0]
+	f.name = "MultiAddonManager-v1.0.0-linux.tar.gz"
+	e := nativeEnv(t)
+	nativeServer(t, e, f, []byte("must not install legacy build"), "", "tags/v1.0.0", "v1.0.0")
+	if err := e.UpdateNative(context.Background(), nativeOptions(f, "v1.0.0")); err == nil || !strings.Contains(err.Error(), "SteamRT4") {
+		t.Fatalf("expected missing SteamRT4 asset error, got %v", err)
+	}
+	if got := e.Versions.Get(f.key); got != "" {
+		t.Fatalf("unsupported pin recorded: %q", got)
+	}
+}
+
+func TestNativeNodeCacheSelectsRT4OrRejectsIncompatiblePin(t *testing.T) {
+	for _, compatible := range []bool{true, false} {
+		name := "RT4"
+		if !compatible {
+			name = "RT3-only pin"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := nativeFixtures[0]
+			e := nativeEnv(t)
+			archive := nativeTar(t, nativeFiles(f))
+			const assetURL = "https://github.com/Source2ZE/MultiAddonManager/releases/download/v2.0.0/MultiAddonManager-v2.0.0-steamrt4.tar.gz"
+			nativeWrite(t, e.Root, "egg/cache/native.tar.gz", string(archive))
+			e.Node = func(q *proto.AddonQuery) *proto.AddonRelease {
+				if q.Repo == f.repo {
+					assets := []proto.AddonAsset{{Name: "MultiAddonManager-v2.0.0-steamrt3.tar.gz", URL: "https://example.invalid/wrong-runtime"}}
+					if compatible {
+						assets = append(assets, proto.AddonAsset{Name: f.name, URL: assetURL, Digest: nativeDigest(archive)})
+					}
+					return &proto.AddonRelease{Repo: q.Repo, Tag: "v2.0.0", Pinned: true, Assets: assets}
+				}
+				if q.URL == assetURL {
+					return &proto.AddonRelease{URL: q.URL, Assets: []proto.AddonAsset{{Name: f.name, Path: "cache/native.tar.gz"}}}
+				}
+				t.Fatalf("unexpected node query: %+v", q)
+				return nil
+			}
+			e.HTTP = &http.Client{Transport: nativeTransport(func(r *http.Request) (*http.Response, error) {
+				t.Errorf("node-cached update unexpectedly requested HTTP: %s", r.URL)
+				return nil, errors.New("HTTP unavailable")
+			})}
+			err := e.UpdateNative(context.Background(), nativeOptions(f, "latest"))
+			if !compatible {
+				if err == nil || !strings.Contains(err.Error(), "SteamRT4") {
+					t.Fatalf("incompatible node pin accepted: %v", err)
+				}
+				if got := e.Versions.Get(f.key); got != "" {
+					t.Fatalf("incompatible node pin recorded: %q", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := nativeRead(t, filepath.Join(e.Root, "game", "csgo"), f.binary); got != "new native binary" {
+				t.Fatalf("RT4 cached binary not installed: %q", got)
+			}
+			if got := e.Versions.Get(f.key); got != "v2.0.0" {
+				t.Fatalf("node pin not recorded: %q", got)
+			}
+		})
+	}
+}
+
+// Rewrite the persisted receipt to represent a pre-v2 or different-runtime
+// installation while retaining valid hashes. Integrity alone is not compatibility.
+func nativeSetReceiptRuntime(t *testing.T, e *addons.Env, f nativeFixture, runtime string) {
+	t.Helper()
+	dir := strings.TrimPrefix(strings.Split(f.binary, "/bin/")[0], "addons/")
+	rel := "egg/native-addons/" + dir + ".json"
+	var receipt map[string]any
+	if err := json.Unmarshal([]byte(nativeRead(t, e.Root, rel)), &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if runtime == "" {
+		receipt["format"] = 1
+		delete(receipt, "runtime")
+	} else {
+		receipt["runtime"] = runtime
+	}
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nativeWrite(t, e.Root, rel, string(data))
+}
+
+func TestNativeMigratesRuntimeEvidenceAtSameVersion(t *testing.T) {
+	for _, f := range nativeFixtures {
+		for _, runtime := range []string{"", "steamrt3", "steamrt4"} {
+			t.Run(f.key+"/"+runtime, func(t *testing.T) {
+				e := nativeEnv(t)
+				csgo := filepath.Join(e.Root, "game", "csgo")
+				files := nativeFiles(f)
+				files[f.binary] = "previous native binary"
+				archive := nativeTar(t, files)
+				nativeServer(t, e, f, archive, nativeDigest(archive), "latest", "v2.0.0")
+				if err := e.UpdateNative(context.Background(), nativeOptions(f, "latest")); err != nil {
+					t.Fatal(err)
+				}
+				nativeSetReceiptRuntime(t, e, f, runtime)
+				nativeWrite(t, csgo, f.config, "private settings")
+				dataPath := strings.Split(f.binary, "/bin/")[0] + "/data/private.db"
+				nativeWrite(t, csgo, dataPath, "private data")
+				archive = nativeTar(t, nativeFiles(f))
+				nativeServer(t, e, f, archive, nativeDigest(archive), "latest", "v2.0.0")
+				if err := e.UpdateNative(context.Background(), nativeOptions(f, "latest")); err != nil {
+					t.Fatal(err)
+				}
+				want := "new native binary"
+				if runtime == "steamrt4" {
+					want = "previous native binary"
+				}
+				if got := nativeRead(t, csgo, f.binary); got != want {
+					t.Fatalf("runtime %q retained/replaced wrong binary: got %q, want %q", runtime, got, want)
+				}
+				if got := nativeRead(t, csgo, f.config); got != "private settings" {
+					t.Fatalf("private config changed: %q", got)
+				}
+				if got := nativeRead(t, csgo, dataPath); got != "private data" {
+					t.Fatalf("private data changed: %q", got)
+				}
+			})
+		}
+	}
+}
+
+func TestNativeOutageRejectsLegacyOrDifferentRuntimeEvidence(t *testing.T) {
+	for _, f := range nativeFixtures {
+		for _, runtime := range []string{"", "steamrt3"} {
+			t.Run(f.key+"/"+runtime, func(t *testing.T) {
+				e := nativeEnv(t)
+				archive := nativeTar(t, nativeFiles(f))
+				nativeServer(t, e, f, archive, nativeDigest(archive), "latest", "v2.0.0")
+				if err := e.UpdateNative(context.Background(), nativeOptions(f, "latest")); err != nil {
+					t.Fatal(err)
+				}
+				nativeSetReceiptRuntime(t, e, f, runtime)
+				nativeFailRelease(t, e, 503)
+				if err := e.UpdateNative(context.Background(), nativeOptions(f, "latest")); err == nil {
+					t.Fatal("legacy/different-runtime installation retained during outage")
+				}
+			})
+		}
 	}
 }
 
