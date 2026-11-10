@@ -42,4 +42,5 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: s2script-cs2-egg:ci
-      - run: docker run --rm s2script-cs2-egg:ci /usr/local/bin/cs2egg version
+      - name: Verify SteamRT4 runtime and entrypoint
+        run: docker run --rm -i s2script-cs2-egg:ci /bin/sh -s < scripts/check-image.sh

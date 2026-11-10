@@ -37,6 +37,8 @@ type nativeAddon struct {
 	asset                                     *regexp.Regexp
 }
 
+const nativeTargetRuntime = "steamrt4"
+
 // UpdateNative updates selected Metamod plugins. Each archive is downloaded,
 // verified, and checked in scratch space before any installed file changes.
 func (e *Env) UpdateNative(ctx context.Context, options NativeOptions) error {
@@ -48,9 +50,8 @@ func (e *Env) UpdateNative(ctx context.Context, options NativeOptions) error {
 		{options.MultiAddonManager, nativeAddon{
 			label: "MultiAddonManager", repo: RepoMultiAddonManager, version: options.MultiAddonManagerVersion,
 			dir: "multiaddonmanager", binary: "bin/multiaddonmanager.so", config: "cfg/multiaddonmanager",
-			// The container uses SteamRT3 (sniper). Do not select SteamRT4,
-			// even when its asset happens to appear first in a release.
-			asset: regexp.MustCompile(`(?i)^MultiAddonManager[-_].*-(?:steamrt3|linux)\.tar\.gz$`),
+			// v2 only runs on SteamRT4; legacy Linux/RT3 builds are not fallbacks.
+			asset: regexp.MustCompile(`(?i)^MultiAddonManager[-_].*-steamrt4\.tar\.gz$`),
 		}},
 		{options.GameFixes, nativeAddon{
 			label: "GameFixes", repo: RepoGameFixes, version: options.GameFixesVersion,
@@ -93,13 +94,11 @@ func (e *Env) updateNative(ctx context.Context, addon nativeAddon) error {
 		return errors.New("release tag is empty")
 	}
 	if !e.decide(addon.label, addon.label, rel.Tag, exact || rel.Pinned) {
-		if NeedsUpdate(e.Versions.Get(addon.label), rel.Tag) == Downgrade {
-			// The requested channel may lag an installed prerelease. Keep
-			// the newer files, but never claim a broken install is usable.
-			return e.nativeInstalledLayout(addon)
-		}
 		if e.nativeVerifiedInstalled(addon) {
 			return nil
+		}
+		if NeedsUpdate(e.Versions.Get(addon.label), rel.Tag) == Downgrade {
+			return fmt.Errorf("installed %s %s has no verified SteamRT4 installation; pin that exact version to repair it", addon.label, e.Versions.Get(addon.label))
 		}
 		e.Log.Logf(logx.Info, "Repairing or verifying %s at %s", addon.label, rel.Tag)
 	}
@@ -108,13 +107,11 @@ func (e *Env) updateNative(ctx context.Context, addon nativeAddon) error {
 		if !addon.asset.MatchString(candidate.Name) {
 			continue
 		}
-		// Recent MAM releases use SteamRT3; older releases used Linux.
-		if asset.Name == "" || strings.Contains(strings.ToLower(candidate.Name), "-steamrt3.tar.gz") {
-			asset = candidate
-		}
+		asset = candidate
+		break
 	}
 	if asset.URL == "" {
-		return errors.New("release has no supported Linux archive")
+		return fmt.Errorf("release %s has no supported Linux archive for SteamRT4; select a compatible version", rel.Tag)
 	}
 	if err := os.MkdirAll(e.Temp, 0o755); err != nil {
 		return err
@@ -386,6 +383,7 @@ func nativeCheckParents(root *os.Root, rel string) error {
 
 type nativeEvidence struct {
 	Format  int               `json:"format"`
+	Runtime string            `json:"runtime"`
 	Repo    string            `json:"repo"`
 	Version string            `json:"version"`
 	Files   map[string]string `json:"files"`
@@ -419,7 +417,8 @@ func nativeFileHash(root *os.Root, rel string) (string, error) {
 }
 
 func nativeBuildEvidence(stage string, addon nativeAddon, version string) (nativeEvidence, error) {
-	record := nativeEvidence{Format: 1, Repo: addon.repo, Version: version, Files: map[string]string{}}
+	// Format 2 also makes older RT3 eggs reject RT4 evidence on rollback.
+	record := nativeEvidence{Format: 2, Runtime: nativeTargetRuntime, Repo: addon.repo, Version: version, Files: map[string]string{}}
 	root, err := os.OpenRoot(stage)
 	if err != nil {
 		return record, err
@@ -447,7 +446,7 @@ func nativeBuildEvidence(stage string, addon nativeAddon, version string) (nativ
 }
 
 func (e *Env) nativeVerifyFiles(addon nativeAddon, record nativeEvidence) error {
-	if record.Format != 1 || record.Repo != addon.repo || record.Version == "" {
+	if record.Format != 2 || record.Runtime != nativeTargetRuntime || record.Repo != addon.repo || record.Version == "" {
 		return errors.New("native installation evidence has an invalid identity")
 	}
 	for _, required := range []string{"addons/" + addon.dir + "/" + addon.binary, "addons/metamod/" + addon.dir + ".vdf"} {
@@ -532,24 +531,6 @@ func (e *Env) nativeVerifiedInstalled(addon nativeAddon) bool {
 		return false
 	}
 	return e.nativeVerifyFiles(addon, record) == nil
-}
-
-func (e *Env) nativeInstalledLayout(addon nativeAddon) error {
-	root, err := nativeGameRoot(e.Root, false)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
-	for _, rel := range []string{"addons/" + addon.dir + "/" + addon.binary, "addons/metamod/" + addon.dir + ".vdf"} {
-		if _, err := nativeFileHash(root, rel); err != nil {
-			return fmt.Errorf("installed newer %s is incomplete: %w", addon.label, err)
-		}
-	}
-	vdf, err := root.ReadFile("addons/metamod/" + addon.dir + ".vdf")
-	if err != nil {
-		return err
-	}
-	return nativeValidateVDF(vdf, addon)
 }
 
 func (e *Env) nativeRetain(ctx context.Context, addon nativeAddon, want string, exact bool, cause error) bool {

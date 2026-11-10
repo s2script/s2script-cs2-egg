@@ -272,10 +272,18 @@ func Run(ctx context.Context, env Env) int {
 
 	cmdline := startup.Expand(env.Getenv("STARTUP"), env.Getenv)
 	cmdline = passwordManager.Startup(cmdline)
+	serverEnv, stackCompat, err := startup.Environment(env.Root, os.Environ())
+	if err != nil {
+		log.Logf(logx.Error, "Server runtime preparation failed: %v", err)
+		return 1
+	}
+	if stackCompat {
+		log.Log(logx.Warning, "S2Script requests an executable stack; enabling SteamRT4 loader compatibility for the game process")
+	}
 	log.Logf(logx.Info, "Starting server: %s", cmdline)
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", cmdline)
 	cmd.Dir = env.Root
-	cmd.Env = os.Environ()
+	cmd.Env = serverEnv
 	if dbg := startup.Debugger(env.Getenv("GDB_DEBUG_PORT")); dbg != "" {
 		cmd.Env = append(cmd.Env, "GAME_DEBUGGER="+dbg)
 		log.Logf(logx.Info, "GDB mode: Server will start under gdbserver on port %s", env.Getenv("GDB_DEBUG_PORT"))

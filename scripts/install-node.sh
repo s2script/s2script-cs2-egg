@@ -67,7 +67,7 @@ curl -fsSL "$base/checksums.txt" -o "$scratch/checksums.txt"
     sha256sum -c node.sha256
 )
 chmod 700 "$scratch/cs2node_linux_amd64"
-# VPK sync executes SteamCMD on the host, outside the SteamRT3 container.
+# VPK sync executes SteamCMD on the host, outside the SteamRT4 container.
 if command -v dpkg-query >/dev/null && command -v apt-get >/dev/null; then
     missing=()
     for package in lib32gcc-s1 lib32stdc++6; do

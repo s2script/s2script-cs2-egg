@@ -1,4 +1,4 @@
-# Dockerfile with SteamRT3
+# Dockerfile with SteamRT4
 #
 # Stage 1 builds cs2egg, the Go entrypoint, on the builder's native platform and
 # cross-compiles for linux/amd64 (static, no libc).
@@ -10,7 +10,7 @@
 # base is flattened into one layer of our own before anything is stacked on top. The upstream
 # config carries only the default PATH and cosmetic labels, nothing to carry over.
 FROM        --platform=$BUILDPLATFORM golang:1.27-alpine AS build
-ARG         VERSION=0.0.0-dev
+ARG         VERSION=2.0.0
 ARG         CHANNEL=dev
 ARG         COMMIT=none
 ARG         BUILT=unknown
@@ -23,14 +23,14 @@ RUN         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
               -ldflags "-s -w -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Version=${VERSION} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Channel=${CHANNEL} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Commit=${COMMIT} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Built=${BUILT}" \
               -o /out/cs2egg ./cmd/cs2egg
 
-FROM        registry.gitlab.steamos.cloud/steamrt/sniper/platform:latest-container-runtime-depot AS upstream
+FROM        registry.gitlab.steamos.cloud/steamrt/steamrt4/platform:latest-container-runtime-depot AS upstream
 
 FROM        scratch
 COPY        --from=upstream / /
 ENV         PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 LABEL       author="K4ryuu @ KitsuneLab" \
             maintainer="S2Script CS2 Egg contributors" \
-            org.opencontainers.image.description="The SteamRT3 Platform image for Pterodactyl CS2 servers is packed with numerous features, designed to simplify server management and reduce hassle." \
+            org.opencontainers.image.description="SteamRT4 Platform image for S2Script CS2 servers on Pelican and Pterodactyl." \
             org.opencontainers.image.source="https://github.com/s2script/s2script-cs2-egg" \
             org.opencontainers.image.licenses="GPL-3.0-or-later"
 

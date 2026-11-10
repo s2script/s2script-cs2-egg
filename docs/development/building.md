@@ -30,9 +30,17 @@ make node VERSION=2.1.0 CHANNEL=beta
 ./scripts/build.sh 1.0.0           # a version tag
 ```
 
-The Dockerfile is two stages. The first compiles `cs2egg` on the builder's native platform and cross-compiles for linux/amd64. The second flattens the SteamRT runtime into one layer and copies the binary in. No shell scripts, no `jq`, no package manager in the final image.
+The Go build stage compiles `cs2egg` on the builder's native platform and cross-compiles for linux/amd64. The final stage flattens the SteamRT4 platform into one layer and copies the binary in. No custom shell entrypoint or package installations are added to the runtime. The default local build version is `2.0.0`; release builds override it from the GitHub tag.
 
 The base is flattened on purpose: the upstream SteamRT layer stores hardlink targets as absolute paths, and some dockerd versions refuse it on pull with `invalid hardlink target`. Re-exporting the rootfs through BuildKit rewrites them.
+
+Verify a built image with:
+
+```bash
+docker run --rm -i ghcr.io/s2script/s2script-cs2-egg:dev /bin/sh -s < scripts/check-image.sh
+```
+
+The check verifies SteamRT4 identity and executable-stack tunable support, executes the i386 loader required by standalone SteamCMD, checks startup tools and the unprivileged container user, and runs `cs2egg version`. It does not launch CS2 or certify native addon gameplay compatibility.
 
 ## Testing against a node
 
@@ -57,7 +65,7 @@ ssh game2 'sudo cs2node install --channel dev'
 ./scripts/release.sh v1.2.3 --dry-run              # preview, touch nothing
 ```
 
-Publish a release directly in GitHub with the desired `vX.Y.Z` tag, or use the optional `release.sh` helper above. The helper accepts the tag explicitly, builds a local node smoke binary with that version, and creates a release at HEAD with automatically generated notes. Neither route reads or edits `VERSION` or requires a changelog entry. Publishing triggers `release.yml`, which builds the node assets and SteamRT3 image from the tagged commit. The tag supplies the embedded version; the release's prerelease flag chooses the channel.
+Publish a release directly in GitHub with the desired `vX.Y.Z` tag, or use the optional `release.sh` helper above. For the RT4 migration, use `v2.0.0`. The helper accepts the tag explicitly, builds a local node smoke binary with that version, and creates a release at HEAD with automatically generated notes. Neither route reads or edits `VERSION` or requires a changelog entry. Publishing triggers `release.yml`, which builds the node assets and SteamRT4 image from the tagged commit. The tag supplies the embedded version; the release's prerelease flag chooses the channel.
 
 | The release is | Channel | Who installs it |
 |---|---|---|
@@ -72,7 +80,7 @@ The daemon's self-updater downloads both files, verifies the SHA-256 and only th
 
 ## CI
 
-Every push and every pull request runs `go vet`, `go test ./...` and a linux/amd64 build. That is the whole gate; keep it green.
+Every push and pull request runs `go vet`, the full Go suite, race tests, a linux/amd64 build and `govulncheck`. CI also builds the RT4 image and runs `scripts/check-image.sh`; releases run the same image check before advancing channel aliases.
 
 ---
 

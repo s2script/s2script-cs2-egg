@@ -103,7 +103,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and publish SteamRT3 image
+      - name: Build and publish SteamRT4 image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v6
         with:
           context: .
@@ -116,8 +116,8 @@ jobs:
             VERSION=${{ needs.node.outputs.version }}
             CHANNEL=${{ needs.node.outputs.channel }}
             COMMIT=${{ needs.node.outputs.commit }}
-      - name: Verify image entrypoint
-        run: docker run --rm ghcr.io/s2script/s2script-cs2-egg:${{ needs.node.outputs.tag }} /usr/local/bin/cs2egg version
+      - name: Verify SteamRT4 runtime and entrypoint
+        run: docker run --rm -i ghcr.io/s2script/s2script-cs2-egg:${{ needs.node.outputs.tag }} /bin/sh -s < scripts/check-image.sh
       - name: Advance channel only for its newest release
         env:
           GH_TOKEN: ${{ github.token }}
