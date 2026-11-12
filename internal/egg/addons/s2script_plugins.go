@@ -44,6 +44,7 @@ func S2ScriptPlugins() []S2ScriptPlugin {
 		{"@s2script/basevotes", "S2SCRIPT_PLUGIN_BASEVOTES", true},
 		{"@s2script/zones", "S2SCRIPT_PLUGIN_ZONES", true},
 		{"@s2script/workshopmaps", "S2SCRIPT_PLUGIN_WORKSHOPMAPS", true},
+		{"@s2script/addonmanager", "S2SCRIPT_PLUGIN_ADDONMANAGER", true},
 		{"@s2script/nominations", "S2SCRIPT_PLUGIN_NOMINATIONS", false},
 		{"@s2script/mapchooser", "S2SCRIPT_PLUGIN_MAPCHOOSER", false},
 		{"@s2script/rockthevote", "S2SCRIPT_PLUGIN_ROCKTHEVOTE", false},

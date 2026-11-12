@@ -82,7 +82,7 @@ func (m *Module) Describe() string {
 func (m *Module) Questions() []module.Question {
 	d := Defaults()
 	return []module.Question{
-		{Key: "dir", Prompt: "Where the shared workshop content lives", Default: d.Dir, Help: "maps, models, skins, anything a server or MultiAddonManager downloads; keep it on the same filesystem as the server volumes, then taking an addon over is instant"},
+		{Key: "dir", Prompt: "Where the shared workshop content lives", Default: d.Dir, Help: "maps, models, skins, anything a server or S2Script's addonmanager downloads; keep it on the same filesystem as the server volumes, then taking an addon over is instant"},
 		{Key: "seed", Prompt: "Offer every cached addon to every server", Default: "true", Kind: module.Bool,
 			Help: "an addon one server downloaded costs the next one nothing; turn it off to leave each server with only what it fetched itself"},
 		{Key: "keep_days", Prompt: "Days to keep an addon version nothing uses", Default: strconv.Itoa(d.KeepDays), Kind: module.Int, Help: "0 = keep forever"},
@@ -95,7 +95,7 @@ func (m *Module) Notes() []string {
 	return []string{
 		"Servers move into the cache on their next boot: what they downloaded goes to the node and comes back as links, so it stops counting against their disk.",
 		"When an addon is updated on the workshop, one server fetches the new version and every other one is relinked to it without downloading.",
-		"Leave MultiAddonManager's mm_addon_mount_download and AddonsManager's RedownloadAddonOnMount off: they re-download an addon that is already installed, which throws the sharing away.",
+		"Leave S2Script addonmanager's addons_mount_download and AddonsManager's RedownloadAddonOnMount off: they re-download an addon that is already installed, which throws the sharing away.",
 	}
 }
 

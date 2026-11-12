@@ -215,11 +215,10 @@ func Run(ctx context.Context, env Env) int {
 			return 1
 		}
 	}
+	retireMultiAddonManager(env, addonEnv, log)
 	if err := addonEnv.UpdateNative(ctx, addons.NativeOptions{
-		MultiAddonManager:        env.flag("INSTALL_MULTIADDONMANAGER"),
-		GameFixes:                env.flag("INSTALL_GAMEFIXES"),
-		MultiAddonManagerVersion: env.Getenv("MULTIADDONMANAGER_VERSION"),
-		GameFixesVersion:         env.Getenv("GAMEFIXES_VERSION"),
+		GameFixes:        env.flag("INSTALL_GAMEFIXES"),
+		GameFixesVersion: env.Getenv("GAMEFIXES_VERSION"),
 	}); err != nil {
 		log.Logf(logx.Error, "Native addon preparation failed: %v", err)
 		return 1
@@ -651,11 +650,27 @@ func runCleanup(root string, cfg configs.Cleanup, log *logx.Console) {
 	}
 }
 
-// S2Script and both native addons require Metamod. Removed framework selectors
-// are deliberately ignored; they cannot enable a different modding framework.
+// S2Script and GameFixes require Metamod. Removed selectors (other modding
+// frameworks, INSTALL_MULTIADDONMANAGER) are deliberately ignored.
 func selection(env Env) addons.Selection {
-	return addons.Selection{Metamod: env.flag("INSTALL_METAMOD") || env.flag("INSTALL_S2SCRIPT") || env.flag("INSTALL_MULTIADDONMANAGER") || env.flag("INSTALL_GAMEFIXES")}
+	return addons.Selection{Metamod: env.flag("INSTALL_METAMOD") || env.flag("INSTALL_S2SCRIPT") || env.flag("INSTALL_GAMEFIXES")}
 
+}
+
+// retireMultiAddonManager removes an install left by an older egg once
+// S2Script's addonmanager plugin can take over: loading both would hook the
+// same engine functions twice. Without the plugin the files stay untouched.
+func retireMultiAddonManager(env Env, addonEnv *addons.Env, log *logx.Console) {
+	if !addons.MultiAddonManagerInstalled(addonEnv.Root) {
+		return
+	}
+	if !env.flag("INSTALL_S2SCRIPT") || !addons.AddonManagerActive(addonEnv.Root) {
+		log.Log(logx.Warning, "MultiAddonManager is installed but no longer updated by the egg. Enable S2Script and its addonmanager plugin to replace it")
+		return
+	}
+	if err := addonEnv.RetireMultiAddonManager(); err != nil {
+		log.Logf(logx.Error, "Could not remove MultiAddonManager: %v. Remove addons/metamod/multiaddonmanager.vdf by hand; it must not run beside S2Script's addonmanager", err)
+	}
 }
 
 // Describe is the one-line identity for --version style output.

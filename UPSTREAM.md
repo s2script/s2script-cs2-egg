@@ -16,7 +16,8 @@ source does not change GitHub's repository-network/fork badge.
 
 - S2Script replaces CounterStrikeSharp, ModSharp and Swiftly.
 - S2Script startup auto-updates, bundled plugin controls and registry management.
-- MultiAddonManager and GameFixes installers; private configuration is retained.
+- GameFixes installer; private configuration is retained. MultiAddonManager is
+  replaced by S2Script's addonmanager plugin; old installs are retired on boot.
 - S2Script panel exports, branding, images, release publishing and self-update URL.
 - A small bootstrap downloads/verifies the node binary and runs the upstream Go
   wizard. It is not a separate Python provisioning implementation.
@@ -44,7 +45,7 @@ go test -race ./tests/...
 If the remote already exists, skip `git remote add`. Native CS2 acceptance still
 needs a test node: install the node before creating servers, enable VPK sync,
 create a server using the fork's new image, and verify automatic discovery,
-read-only sharing, S2Script/plugins, both native addons, and clean Stop/Start.
+read-only sharing, S2Script/plugins, GameFixes, and clean Stop/Start.
 
 ## Legacy migration and publication
 

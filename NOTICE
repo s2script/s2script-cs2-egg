@@ -8,11 +8,11 @@ Copyright (C) 2026 S2Script CS2 Egg contributors.
 Project code remains licensed under GPL-3.0-or-later; see LICENSE.
 Upstream package paths, daemon/entrypoint names and core behaviour are retained
 to keep the downstream patch small. S2Script-focused extensions replace the
-other modding framework updaters and add plugin management, MultiAddonManager
-and GameFixes. Images and self-updates use the S2Script repository.
+other modding framework updaters and add plugin management and GameFixes.
+Images and self-updates use the S2Script repository.
 
-S2Script, Metamod, MultiAddonManager, GameFixes, Valve SteamCMD/SteamRT and
-downloaded plugins retain their respective licences and notices. They are
-downloaded separately rather than included as implementation source here.
+S2Script, Metamod, GameFixes, Valve SteamCMD/SteamRT and downloaded plugins
+retain their respective licences and notices. They are downloaded separately
+rather than included as implementation source here.
 Go and Go module dependencies retain their upstream licences. Container images
 include this notice, LICENSE and Go's licence with the compiled entrypoint.

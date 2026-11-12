@@ -20,7 +20,7 @@ Enable `vpksync` for one shared CS2 install. It downloads CS2 to `/srv/cs2-share
 
 | Module | Purpose |
 |---|---|
-| `addoncache` | Cache Metamod, S2Script, MultiAddonManager and GameFixes; hold fleet versions |
+| `addoncache` | Cache Metamod, S2Script and GameFixes; hold fleet versions |
 | `workshop` | Share workshop content |
 | `guard` | Host packet filtering; requires a supported kernel |
 | `crashes`, `metrics` | Crash evidence and node/server status |

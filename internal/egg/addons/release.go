@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Package addons keeps Metamod, S2Script, MultiAddonManager and GameFixes
+// Package addons keeps Metamod, S2Script and GameFixes
 // installed and current from their GitHub releases.
 package addons
 
@@ -36,21 +36,19 @@ type Release struct {
 	Pinned bool `json:"-"`
 }
 
-// The repos behind the four addons, named once so a version pin and an
+// The repos behind the three addons, named once so a version pin and an
 // updater can never drift apart.
 const (
-	RepoMetamod           = "alliedmodders/metamod-source"
-	RepoS2Script          = "s2script/s2script"
-	RepoMultiAddonManager = "Source2ZE/MultiAddonManager"
-	RepoGameFixes         = "SlynxCZ/GameFixes_mm"
+	RepoMetamod   = "alliedmodders/metamod-source"
+	RepoS2Script  = "s2script/s2script"
+	RepoGameFixes = "SlynxCZ/GameFixes_mm"
 )
 
 // Pinnable maps the name a version pin uses to the repo that serves it.
 var Pinnable = map[string]string{
-	"metamod":           RepoMetamod,
-	"s2script":          RepoS2Script,
-	"multiaddonmanager": RepoMultiAddonManager,
-	"gamefixes":         RepoGameFixes,
+	"metamod":   RepoMetamod,
+	"s2script":  RepoS2Script,
+	"gamefixes": RepoGameFixes,
 }
 
 // KeyForRepo is the pin name of a repo, empty when it cannot be pinned.

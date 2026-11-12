@@ -18,7 +18,7 @@ import (
 )
 
 // Addons in display order.
-var Addons = []string{"metamod", "s2script", "multiaddonmanager", "gamefixes"}
+var Addons = []string{"metamod", "s2script", "gamefixes"}
 
 // Latest is what a caller types to free one server from a global pin.
 const Latest = "latest"
@@ -49,8 +49,6 @@ func (c Config) global(addon string) string {
 		return c.PinMetamod
 	case "s2script":
 		return c.PinS2Script
-	case "multiaddonmanager":
-		return c.PinMultiAddonManager
 	case "gamefixes":
 		return c.PinGameFixes
 	}
@@ -63,8 +61,6 @@ func (c *Config) setGlobal(addon, version string) {
 		c.PinMetamod = version
 	case "s2script":
 		c.PinS2Script = version
-	case "multiaddonmanager":
-		c.PinMultiAddonManager = version
 	case "gamefixes":
 		c.PinGameFixes = version
 	}

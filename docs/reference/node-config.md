@@ -83,7 +83,7 @@
 | `refresh_minutes` | `60` | How long a release answer stays fresh |
 | `keep_days` | `30` | Drop files nobody asked for this long |
 | `pin_versions` | `false` | Hold every server at the pinned versions below |
-| `pin_metamod`, `pin_s2script`, `pin_multiaddonmanager`, `pin_gamefixes` | empty | The version to hold. Empty means newest |
+| `pin_metamod`, `pin_s2script`, `pin_gamefixes` | empty | The version to hold. Empty means newest |
 | `pin_per_server` | empty | `{"<server id>": {"pin_metamod": "git1400"}}`. An empty value frees that one server |
 
 ## alerts

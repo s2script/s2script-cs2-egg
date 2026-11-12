@@ -1,6 +1,6 @@
 # Workshop cache
 
-A workshop item costs its full size in every server that mounts it, and every server downloads it separately. Maps are only part of that: model packs, skins and sound replacements come from the same workshop, and plugins like [MultiAddonManager](https://github.com/Source2ZE/MultiAddonManager) mount a whole list per server.
+A workshop item costs its full size in every server that mounts it, and every server downloads it separately. Maps are only part of that: model packs, skins and sound replacements come from the same workshop, and S2Script's `addonmanager` plugin mounts a whole list per server.
 
 This module keeps one copy per node and links it into every server, the same way [VPK sync](vpk-sync.md) handles the game files. Three maps on one test server came to 692 MiB; twenty servers sharing them would be 13 GiB and nineteen pointless downloads.
 
@@ -70,7 +70,7 @@ Some workshop items predate Source 2 and carry no version id; the game records `
 
 Both addon managers can be told to re-download an item on every mount, even one that is already installed:
 
-- MultiAddonManager: `mm_addon_mount_download 1`
+- S2Script addonmanager: `addons_mount_download true`
 - AddonsManager: `RedownloadAddonOnMount`
 
 Leave those off. They throw the sharing away, and a re-download while the server is running has nowhere to write.

@@ -33,7 +33,6 @@ type nativeFixture struct {
 }
 
 var nativeFixtures = []nativeFixture{
-	{"Source2ZE/MultiAddonManager", "MultiAddonManager", "MultiAddonManager-v1.6.2-steamrt4.tar.gz", "addons/multiaddonmanager/bin/multiaddonmanager.so", "addons/metamod/multiaddonmanager.vdf", "addons/multiaddonmanager/bin/multiaddonmanager", "cfg/multiaddonmanager/multiaddonmanager.cfg"},
 	{"SlynxCZ/GameFixes_mm", "GameFixes", "GameFixes_mm_v1.0.14-linux.tar.gz", "addons/game_fixes/bin/linuxsteamrt64/game_fixes.so", "addons/metamod/game_fixes.vdf", "addons/game_fixes/bin/linuxsteamrt64/game_fixes", "addons/game_fixes/game_fixes.ini"},
 }
 
@@ -68,7 +67,7 @@ func nativeFiles(f nativeFixture) map[string]string {
 }
 
 func nativeOptions(f nativeFixture, version string) addons.NativeOptions {
-	return addons.NativeOptions{MultiAddonManager: f.key == "MultiAddonManager", GameFixes: f.key == "GameFixes", MultiAddonManagerVersion: version, GameFixesVersion: version}
+	return addons.NativeOptions{GameFixes: f.key == "GameFixes", GameFixesVersion: version}
 }
 
 func nativeEnv(t *testing.T) *addons.Env {
@@ -113,12 +112,6 @@ func nativeServer(t *testing.T, e *addons.Env, f nativeFixture, archive []byte, 
 		assets := []map[string]string{
 			{"name": f.name + ".windows.zip", "browser_download_url": srv.URL + "/wrong-platform"},
 			{"name": f.name, "browser_download_url": srv.URL + "/asset", "digest": digest},
-		}
-		if f.key == "MultiAddonManager" {
-			assets = append([]map[string]string{
-				{"name": strings.Replace(f.name, "steamrt4", "steamrt3", 1), "browser_download_url": srv.URL + "/wrong-runtime"},
-				{"name": strings.Replace(f.name, "steamrt4", "linux", 1), "browser_download_url": srv.URL + "/legacy-runtime"},
-			}, assets...)
 		}
 		rel := map[string]any{"tag_name": tag, "prerelease": e.Prerelease, "assets": assets}
 		if wantEndpoint == "" {
@@ -210,7 +203,7 @@ func TestNativeExactVersionAllowsDowngrade(t *testing.T) {
 }
 
 func TestNativePrereleaseUsesReleaseList(t *testing.T) {
-	f := nativeFixtures[1]
+	f := nativeFixtures[0]
 	e := nativeEnv(t)
 	e.Prerelease = true
 	archive := nativeTar(t, nativeFiles(f))
@@ -264,7 +257,7 @@ func TestNativeLatestDoesNotDowngrade(t *testing.T) {
 }
 
 func TestNativeRejectsUnverifiedNewerInstallWithoutDowngrading(t *testing.T) {
-	f := nativeFixtures[1]
+	f := nativeFixtures[0]
 	e := nativeEnv(t)
 	csgo := filepath.Join(e.Root, "game", "csgo")
 	for name, body := range nativeFiles(f) {
@@ -282,34 +275,21 @@ func TestNativeRejectsUnverifiedNewerInstallWithoutDowngrading(t *testing.T) {
 	}
 }
 
-func TestNativeMultiAddonManagerRequiresRT4AssetForExactPin(t *testing.T) {
-	f := nativeFixtures[0]
-	f.name = "MultiAddonManager-v1.0.0-linux.tar.gz"
-	e := nativeEnv(t)
-	nativeServer(t, e, f, []byte("must not install legacy build"), "", "tags/v1.0.0", "v1.0.0")
-	if err := e.UpdateNative(context.Background(), nativeOptions(f, "v1.0.0")); err == nil || !strings.Contains(err.Error(), "SteamRT4") {
-		t.Fatalf("expected missing SteamRT4 asset error, got %v", err)
-	}
-	if got := e.Versions.Get(f.key); got != "" {
-		t.Fatalf("unsupported pin recorded: %q", got)
-	}
-}
-
-func TestNativeNodeCacheSelectsRT4OrRejectsIncompatiblePin(t *testing.T) {
+func TestNativeNodeCacheSelectsLinuxAssetOrRejectsIncompatiblePin(t *testing.T) {
 	for _, compatible := range []bool{true, false} {
-		name := "RT4"
+		name := "linux"
 		if !compatible {
-			name = "RT3-only pin"
+			name = "windows-only pin"
 		}
 		t.Run(name, func(t *testing.T) {
 			f := nativeFixtures[0]
 			e := nativeEnv(t)
 			archive := nativeTar(t, nativeFiles(f))
-			const assetURL = "https://github.com/Source2ZE/MultiAddonManager/releases/download/v2.0.0/MultiAddonManager-v2.0.0-steamrt4.tar.gz"
+			const assetURL = "https://github.com/SlynxCZ/GameFixes_mm/releases/download/v2.0.0/GameFixes_mm_v1.0.14-linux.tar.gz"
 			nativeWrite(t, e.Root, "egg/cache/native.tar.gz", string(archive))
 			e.Node = func(q *proto.AddonQuery) *proto.AddonRelease {
 				if q.Repo == f.repo {
-					assets := []proto.AddonAsset{{Name: "MultiAddonManager-v2.0.0-steamrt3.tar.gz", URL: "https://example.invalid/wrong-runtime"}}
+					assets := []proto.AddonAsset{{Name: "GameFixes_mm_v1.0.14-windows.zip", URL: "https://example.invalid/wrong-platform"}}
 					if compatible {
 						assets = append(assets, proto.AddonAsset{Name: f.name, URL: assetURL, Digest: nativeDigest(archive)})
 					}
@@ -339,7 +319,7 @@ func TestNativeNodeCacheSelectsRT4OrRejectsIncompatiblePin(t *testing.T) {
 				t.Fatal(err)
 			}
 			if got := nativeRead(t, filepath.Join(e.Root, "game", "csgo"), f.binary); got != "new native binary" {
-				t.Fatalf("RT4 cached binary not installed: %q", got)
+				t.Fatalf("cached binary not installed: %q", got)
 			}
 			if got := e.Versions.Get(f.key); got != "v2.0.0" {
 				t.Fatalf("node pin not recorded: %q", got)
@@ -447,7 +427,7 @@ func TestNativeRejectsExactTagMismatch(t *testing.T) {
 func TestNativeRejectsBadPayloadBeforeChangingInstall(t *testing.T) {
 	for _, issue := range []string{"digest", "archive", "gzip-checksum", "layout", "vdf", "unexpected-file", "traversal", "malformed-digest"} {
 		t.Run(issue, func(t *testing.T) {
-			f := nativeFixtures[1]
+			f := nativeFixtures[0]
 			e := nativeEnv(t)
 			csgo := filepath.Join(e.Root, "game", "csgo")
 			nativeWrite(t, csgo, f.binary, "installed binary")
@@ -498,7 +478,7 @@ func TestNativeRejectsBadPayloadBeforeChangingInstall(t *testing.T) {
 }
 
 func TestNativeRejectsInstalledDirectorySymlinksBeforeWriting(t *testing.T) {
-	f := nativeFixtures[1]
+	f := nativeFixtures[0]
 	e := nativeEnv(t)
 	csgo := filepath.Join(e.Root, "game", "csgo")
 	nativeWrite(t, csgo, "cfg/private/linuxsteamrt64/game_fixes.so", "private file")
@@ -525,7 +505,7 @@ func TestNativeRejectsInstalledDirectorySymlinksBeforeWriting(t *testing.T) {
 func TestNativeRejectsSymlinkedGameRoot(t *testing.T) {
 	for _, parent := range []string{"game", "game/csgo"} {
 		t.Run(parent, func(t *testing.T) {
-			f := nativeFixtures[1]
+			f := nativeFixtures[0]
 			e := nativeEnv(t)
 			outside := t.TempDir()
 			if err := os.MkdirAll(filepath.Dir(filepath.Join(e.Root, parent)), 0755); err != nil {
@@ -680,7 +660,7 @@ func TestNativeOutageDoesNotTrustVersionRecordAlone(t *testing.T) {
 }
 
 func TestNativeIntegrityFailureDoesNotRetainVerifiedInstall(t *testing.T) {
-	f := nativeFixtures[1]
+	f := nativeFixtures[0]
 	e := nativeEnv(t)
 	archive := nativeTar(t, nativeFiles(f))
 	nativeServer(t, e, f, archive, nativeDigest(archive), "latest", "v2.0.0")
@@ -702,7 +682,7 @@ func TestNativeIntegrityFailureDoesNotRetainVerifiedInstall(t *testing.T) {
 func TestNativeAssetOutageRetainsVerifiedInstallUnlessPinChanges(t *testing.T) {
 	for _, want := range []string{"latest", "v3.0.0"} {
 		t.Run(want, func(t *testing.T) {
-			f := nativeFixtures[1]
+			f := nativeFixtures[0]
 			e := nativeEnv(t)
 			archive := nativeTar(t, nativeFiles(f))
 			nativeServer(t, e, f, archive, nativeDigest(archive), "latest", "v2.0.0")

@@ -26,7 +26,7 @@ The GSLT is masked in every console line and every log file, so a screenshot can
 
 ## Addons and plugins
 
-Metamod, S2Script, MultiAddonManager and GameFixes default to enabled. Each selected addon checks updates on startup.
+Metamod, S2Script and GameFixes default to enabled. Each selected addon checks updates on startup.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -34,14 +34,12 @@ Metamod, S2Script, MultiAddonManager and GameFixes default to enabled. Each sele
 | `INSTALL_S2SCRIPT` | `1` | Framework and plugin preparation |
 | `S2SCRIPT_CHANNEL` | `stable` | `stable` or `prerelease` framework releases |
 | `S2SCRIPT_VERSION` | empty | Optional exact framework tag |
-| `INSTALL_MULTIADDONMANAGER` | `1` | Linux SteamRT4 downloader |
-| `MULTIADDONMANAGER_VERSION` | empty | Optional exact release tag |
 | `INSTALL_GAMEFIXES` | `1` | GameFixes downloader |
 | `GAMEFIXES_VERSION` | empty | Optional exact release tag |
 | `PRERELEASE` | `0` | Include prereleases for native addons; Metamod always uses prereleases |
-| 20 `S2SCRIPT_PLUGIN_*` switches | `default` | Preserve choices, `1` enable, `0` disable |
+| 21 `S2SCRIPT_PLUGIN_*` switches | `default` | Preserve choices, `1` enable, `0` disable |
 
-Exact switch names are in the egg. See [addons and plugin commands](../addons.md) and [node addon cache](../modules/addon-cache.md).
+Exact switch names are in the egg. `INSTALL_MULTIADDONMANAGER` and `MULTIADDONMANAGER_VERSION` are removed and ignored; see [moving off MultiAddonManager](../addons.md#moving-off-multiaddonmanager). See [addons and plugin commands](../addons.md) and [node addon cache](../modules/addon-cache.md).
 
 ## Features
 
