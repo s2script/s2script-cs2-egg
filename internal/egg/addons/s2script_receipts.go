@@ -68,7 +68,7 @@ func (s *s2PluginStore) readJSON(path string, v any) error {
 		return err
 	}
 	defer dir.Close()
-	b, err := s2ReadAt(dir, filepath.Base(path), 4<<20)
+	b, err := s2ReadAt(dir, filepath.Base(path), s2MaxMetadata)
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func (s *s2PluginStore) writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	if len(b) > 4<<20 {
+	if len(b) > s2MaxMetadata {
 		return errors.New("plugin metadata exceeds limit")
 	}
 	return s2WriteAt(dir, filepath.Base(path), append(b, '\n'))
@@ -145,12 +145,12 @@ func (s *s2PluginStore) retained(actual []s2Installed) ([]s2Installed, error) {
 
 func (s *s2PluginStore) save(all []s2Installed) error {
 	sort.Slice(all, func(i, j int) bool { return all[i].Name < all[j].Name })
-	lock, err := s2ReadAt(s.root, "s2script-plugins.lock.json", 4<<20)
+	lock, err := s2ReadAt(s.root, "s2script-plugins.lock.json", s2MaxMetadata)
 	lockMissing := errors.Is(err, unix.ENOENT)
 	if err != nil && !lockMissing {
 		return err
 	}
-	inventory, err := s2ReadAt(s.egg, "installed-list.json", 4<<20)
+	inventory, err := s2ReadAt(s.egg, "installed-list.json", s2MaxMetadata)
 	inventoryMissing := errors.Is(err, unix.ENOENT)
 	if err != nil && !inventoryMissing {
 		return err

@@ -56,6 +56,15 @@ func S2ScriptPlugins() []S2ScriptPlugin {
 const s2PluginDir = "game/csgo/addons/s2script/plugins"
 const s2MaxPlugin = 64 << 20
 
+// s2MaxManifest bounds one plugin's manifest.json. Interop plugins embed their
+// typed contracts there; one TTT core manifest is already 850 KB.
+const s2MaxManifest = 16 << 20
+
+// s2MaxMetadata bounds the egg's plugin metadata files (the lock, inventory and
+// S2Script's native manifest and lock), which carry every plugin's manifest.
+// A TTT server's plugins alone are about 3.3 MB of manifests.
+const s2MaxMetadata = 128 << 20
+
 var s2PluginName = regexp.MustCompile(`^(?:@[a-zA-Z0-9._-]+/)?[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 var s2PluginFilename = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9._-]*\.s2sp$`)
 
@@ -335,20 +344,20 @@ func s2Inspect(data []byte) (s2Manifest, json.RawMessage, error) {
 		if name != "manifest.json" {
 			continue
 		}
-		if f.UncompressedSize64 > 1<<20 {
+		if f.UncompressedSize64 > s2MaxManifest {
 			return m, nil, errors.New("plugin manifest exceeds limit")
 		}
 		r, err := f.Open()
 		if err != nil {
 			return m, nil, err
 		}
-		raw, err = io.ReadAll(io.LimitReader(r, (1<<20)+1))
+		raw, err = io.ReadAll(io.LimitReader(r, s2MaxManifest+1))
 		r.Close()
 		if err != nil {
 			return m, nil, err
 		}
 	}
-	if len(raw) == 0 || len(raw) > 1<<20 || !pluginJS {
+	if len(raw) == 0 || len(raw) > s2MaxManifest || !pluginJS {
 		return m, nil, errors.New("plugin ZIP needs manifest.json and regular plugin.js")
 	}
 	if err = s2JSON(raw, &m); err != nil {

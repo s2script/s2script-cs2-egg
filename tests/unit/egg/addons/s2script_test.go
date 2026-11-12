@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -745,5 +746,37 @@ func TestS2ScriptDefaultsAreCreatedAndBundlePlacementIsPreserved(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(e.Root, "game/csgo", disabled)); !os.IsNotExist(err) {
 		t.Fatal("update reset manually enabled bundled plugin")
+	}
+}
+
+// Interop plugins embed their typed contracts in manifest.json. A TTT server
+// carries about 3.3 MB of manifests (850 KB for core alone), which overflowed
+// the old 4 MiB lock and 1 MiB manifest limits once JSON-escaped.
+func TestS2ScriptAcceptsLargeInteropManifests(t *testing.T) {
+	contract := strings.Repeat("export interface Round<T> { on(e: Array<T>): void } & ", 16000) // ~900 KB, '<' '>' '&' expand when escaped
+	files := s2files(t, "0.13.0")
+	e := s2fixture(t, s2zip(t, files), "0.13.0", "valid", "/latest", false)
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("@edgegamers/ttt-part%d", i)
+		manifest, err := json.Marshal(map[string]any{"id": id, "version": "2.0.0", "apiVersion": "3.x", "contract": contract})
+		if err != nil {
+			t.Fatal(err)
+		}
+		plugin := s2zip(t, map[string][]byte{"manifest.json": manifest, "plugin.js": []byte("plugin")})
+		s2write(t, e.Root, fmt.Sprintf("addons/s2script/plugins/_edgegamers_ttt-part%d.s2sp", i), plugin)
+	}
+	if err := e.UpdateS2Script(context.Background(), addons.S2ScriptOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := os.ReadFile(filepath.Join(e.Root, "s2script-plugins.lock.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lock) <= 4<<20 {
+		t.Fatalf("fixture too small to cover the old limit: %d bytes", len(lock))
+	}
+	// A second boot reads the large lock back.
+	if err := e.UpdateS2Script(context.Background(), addons.S2ScriptOptions{}); err != nil {
+		t.Fatal(err)
 	}
 }

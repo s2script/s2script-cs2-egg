@@ -143,7 +143,7 @@ func (s *s2PluginStore) configureNative(m *s2NativeManifest, overrides map[strin
 		return err
 	}
 	defer dir.Close()
-	old, err := s2ReadAt(dir, "plugins.json", 4<<20)
+	old, err := s2ReadAt(dir, "plugins.json", s2MaxMetadata)
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func (s *s2PluginStore) applyNative(before, after []s2Installed) error {
 		return err
 	}
 	defer dir.Close()
-	old, err := s2ReadAt(dir, "plugins-lock.json", 4<<20)
+	old, err := s2ReadAt(dir, "plugins-lock.json", s2MaxMetadata)
 	if errors.Is(err, unix.ENOENT) {
 		return s.s2Apply(before, after, nil)
 	}
