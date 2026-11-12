@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Raise the plugin metadata limits (lock, inventory, native manifest/lock to 128 MiB; one manifest to 16 MiB). Interop plugins embed their typed contracts in manifests, and a TTT server's lock outgrew 4 MiB.
 - Stop installing MultiAddonManager: S2Script's bundled `addonmanager` plugin mounts workshop addons natively. On boot, an existing MultiAddonManager install is unloaded and its addon settings move to the addonmanager config. `INSTALL_MULTIADDONMANAGER`, `MULTIADDONMANAGER_VERSION` and the `multiaddonmanager` node pin are removed.
 - Register the S2Script `addonmanager` bundled plugin (`S2SCRIPT_PLUGIN_ADDONMANAGER`).
 - Merge newly shipped translation phrases during S2Script framework updates while preserving custom wording, keys, and language catalogs.
