@@ -107,12 +107,17 @@ func (n *fakeNode) await(t *testing.T, what string, ok func(proto.Message) bool)
 
 // runEgg boots the egg with startup as the server command and stops it when
 // the test ends.
-func runEgg(t *testing.T, root, startup string) {
+func runEgg(t *testing.T, root, startup string, overrides ...map[string]string) {
 	t.Helper()
 	env := map[string]string{
 		"STARTUP":           startup,
 		"SRCDS_STOP_UPDATE": "1", // no steamcmd in a test
 		"CONSOLE_LOG_LEVEL": "debug",
+	}
+	for _, values := range overrides {
+		for key, value := range values {
+			env[key] = value
+		}
 	}
 	inR, inW, err := os.Pipe()
 	if err != nil {

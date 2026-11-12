@@ -161,6 +161,36 @@
             "field_type": "text"
         },
         {
+            "name": "Connection Trace",
+            "description": "Opt-in read-only connection diagnostics for a test server. Captures one source IP for a bounded window on each restart. Does not enable Guard or change firewall rules.",
+            "env_variable": "ENABLE_CONNECTION_TRACE",
+            "default_value": "0",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Connection Trace IP",
+            "description": "Client source IP as seen by CS2, without a port or CIDR. Required when tracing; not printed in trace records. Administrators and container processes can still read this value.",
+            "env_variable": "CONNECTION_TRACE_IP",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|ip",
+            "field_type": "text"
+        },
+        {
+            "name": "Connection Trace Window",
+            "description": "Diagnostic window in seconds (60–1800), starting at server launch. Restart renews it while enabled; disable tracing after reproduction.",
+            "env_variable": "CONNECTION_TRACE_SECONDS",
+            "default_value": "600",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|integer|min:60|max:1800",
+            "field_type": "text"
+        },
+        {
             "name": "Bot Guard",
             "description": "Behaviour-based connection defense against advertising/console-spam bots. Detects clients that never finish signon yet act or persist, and temporarily blocks them. Starts in dry-run (log only); tune and enable blocking in /egg/configs/guard.json.",
             "env_variable": "ENABLE_GUARD",
