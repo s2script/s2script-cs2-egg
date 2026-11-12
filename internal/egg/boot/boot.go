@@ -660,11 +660,13 @@ func selection(env Env) addons.Selection {
 // retireMultiAddonManager removes an install left by an older egg once
 // S2Script's addonmanager plugin can take over: loading both would hook the
 // same engine functions twice. Without the plugin the files stay untouched.
+// INSTALL_S2SCRIPT=0 only stops framework updates, so it is not consulted:
+// an installed, enabled addonmanager still loads.
 func retireMultiAddonManager(env Env, addonEnv *addons.Env, log *logx.Console) {
 	if !addons.MultiAddonManagerInstalled(addonEnv.Root) {
 		return
 	}
-	if !env.flag("INSTALL_S2SCRIPT") || !addons.AddonManagerActive(addonEnv.Root) {
+	if !addons.AddonManagerActive(addonEnv.Root) {
 		log.Log(logx.Warning, "MultiAddonManager is installed but no longer updated by the egg. Enable S2Script and its addonmanager plugin to replace it")
 		return
 	}

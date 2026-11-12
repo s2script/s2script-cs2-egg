@@ -150,6 +150,10 @@ func TestAddonManagerActiveNeedsTheEnabledPackage(t *testing.T) {
 		t.Fatal("a disabled addonmanager cannot replace MultiAddonManager")
 	}
 	nativeWrite(t, game, "addons/s2script/plugins/_s2script_addonmanager.s2sp", "zip")
+	if addons.AddonManagerActive(e.Root) {
+		t.Fatal("addonmanager cannot run while Metamod does not load S2Script")
+	}
+	nativeWrite(t, game, "addons/metamod/s2script.vdf", "loader")
 	if !addons.AddonManagerActive(e.Root) {
 		t.Fatal("enabled addonmanager not detected")
 	}

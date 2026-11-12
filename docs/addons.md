@@ -24,7 +24,7 @@ The 21 `S2SCRIPT_PLUGIN_*` panel switches accept `default`, `1`, or `0`. `defaul
 
 The egg no longer installs or updates [MultiAddonManager](https://github.com/Source2ZE/MultiAddonManager). S2Script's bundled `addonmanager` plugin (`S2SCRIPT_PLUGIN_ADDONMANAGER`, enabled by default) mounts workshop addons on the server and sends them to clients itself. The two hook the same engine functions, so a server must not load both.
 
-On the first boot where S2Script is enabled and the installed release ships an enabled `addonmanager`, the egg retires an existing MultiAddonManager install:
+On the first boot where S2Script is installed and its `addonmanager` plugin is enabled (whether or not `INSTALL_S2SCRIPT` keeps it updated), the egg retires an existing MultiAddonManager install:
 
 1. If `cfg/multiaddonmanager/multiaddonmanager.cfg` lists addons and `addons/s2script/configs/_s2script_addonmanager.json` does not exist yet, the settings are written there under their new names. An existing addonmanager config is never overwritten; the egg logs a warning instead.
 2. `addons/metamod/multiaddonmanager.vdf`, `addons/multiaddonmanager/bin/` and the egg's install receipt are removed. MultiAddonManager's cfg directory stays for reference.

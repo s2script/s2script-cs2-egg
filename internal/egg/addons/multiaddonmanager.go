@@ -27,6 +27,7 @@ const (
 
 	// addonManagerPlugin is the active (not disabled/) addonmanager package.
 	addonManagerPlugin = "addons/s2script/plugins/_s2script_addonmanager.s2sp"
+	s2scriptLoader     = "addons/metamod/s2script.vdf"
 
 	// AddonManagerConfig is the addonmanager plugin's config file (the
 	// runtime names it after the plugin id, with '@' and '/' as '_').
@@ -55,10 +56,11 @@ func MultiAddonManagerInstalled(serverRoot string) bool {
 	return gameFileExists(serverRoot, mamLoader)
 }
 
-// AddonManagerActive reports whether S2Script's addonmanager plugin is
-// installed and enabled, so it can take over from MultiAddonManager.
+// AddonManagerActive reports whether Metamod loads S2Script and its
+// addonmanager plugin is installed and enabled, so it can take over from
+// MultiAddonManager.
 func AddonManagerActive(serverRoot string) bool {
-	return gameFileExists(serverRoot, addonManagerPlugin)
+	return gameFileExists(serverRoot, s2scriptLoader) && gameFileExists(serverRoot, addonManagerPlugin)
 }
 
 func gameFileExists(serverRoot, rel string) bool {
