@@ -193,7 +193,7 @@ func TestS2ScriptCatalogReturnsIndependentReviewedDefaults(t *testing.T) {
 			t.Fatalf("invalid catalog %+v", p)
 		}
 	}
-	if len(all) != 20 || enabled != 15 {
+	if len(all) != 21 || enabled != 16 {
 		t.Fatalf("catalog: %d total, %d enabled", len(all), enabled)
 	}
 	all[0].Name = "changed"

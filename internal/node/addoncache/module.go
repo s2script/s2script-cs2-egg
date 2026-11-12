@@ -33,11 +33,10 @@ type Config struct {
 
 	// PinVersions holds every server at the versions below instead of the
 	// newest release; the pins stay in the file when it is off.
-	PinVersions          bool   `json:"pin_versions"`
-	PinMetamod           string `json:"pin_metamod,omitempty"`
-	PinS2Script          string `json:"pin_s2script,omitempty"`
-	PinMultiAddonManager string `json:"pin_multiaddonmanager,omitempty"`
-	PinGameFixes         string `json:"pin_gamefixes,omitempty"`
+	PinVersions  bool   `json:"pin_versions"`
+	PinMetamod   string `json:"pin_metamod,omitempty"`
+	PinS2Script  string `json:"pin_s2script,omitempty"`
+	PinGameFixes string `json:"pin_gamefixes,omitempty"`
 	// PinPerServer overrides the pins above for one container, by its name.
 	// An entry set to "" means that server follows the newest release even
 	// while the others are held back.
@@ -61,12 +60,21 @@ func (c Config) Check() error {
 	}
 	for server, pins := range c.PinPerServer {
 		for key := range pins {
+			if retiredPin(key) {
+				continue
+			}
 			if _, ok := addons.Pinnable[strings.TrimPrefix(key, "pin_")]; !ok {
 				return fmt.Errorf("pin_per_server[%s] has an unknown addon %q", server, key)
 			}
 		}
 	}
 	return nil
+}
+
+// retiredPin is a pin for an addon the egg no longer installs. Configs written
+// by older versions may still carry one; it is ignored rather than refused.
+func retiredPin(key string) bool {
+	return strings.TrimPrefix(key, "pin_") == "multiaddonmanager"
 }
 
 // PinKey is the config key holding one addon's pinned version.
@@ -92,8 +100,6 @@ func (c Config) Pin(container, repo string) string {
 		return strings.TrimSpace(c.PinMetamod)
 	case "s2script":
 		return strings.TrimSpace(c.PinS2Script)
-	case "multiaddonmanager":
-		return strings.TrimSpace(c.PinMultiAddonManager)
 	case "gamefixes":
 		return strings.TrimSpace(c.PinGameFixes)
 	}
@@ -143,7 +149,7 @@ func Allowed(raw string) bool {
 func (m *Module) Name() string { return "addoncache" }
 
 func (m *Module) Describe() string {
-	return "Addon cache: one GitHub fetch per node for Metamod, S2Script, MultiAddonManager and GameFixes, shared with every server"
+	return "Addon cache: one GitHub fetch per node for Metamod, S2Script and GameFixes, shared with every server"
 }
 
 func (m *Module) Questions() []module.Question {
@@ -156,7 +162,6 @@ func (m *Module) Questions() []module.Question {
 			Help: "hold every server at versions you choose instead of the newest release, so one bad upstream build cannot reach the fleet"},
 		{Key: "pin_metamod", Prompt: "Metamod version", Help: "e.g. 2.0.0-git1450 or git1450, empty = always the newest", When: pinned},
 		{Key: "pin_s2script", Prompt: "S2Script version", Help: "e.g. v1.0.360, empty = always the newest", When: pinned},
-		{Key: "pin_multiaddonmanager", Prompt: "MultiAddonManager version", Help: "release tag, empty = always the newest", When: pinned},
 		{Key: "pin_gamefixes", Prompt: "GameFixes version", Help: "release tag, empty = always the newest", When: pinned},
 	}
 }

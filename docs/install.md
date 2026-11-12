@@ -57,13 +57,12 @@ The first boot downloads CS2, so it takes a while. Later boots only check for up
 
 ## What to switch on
 
-S2Script, Metamod, MultiAddonManager and GameFixes are enabled by default. The switches that matter, all on the Startup tab:
+S2Script, Metamod and GameFixes are enabled by default. The switches that matter, all on the Startup tab:
 
 | Variable | Turn it on when |
 |---|---|
 | `INSTALL_METAMOD` | You run any plugin at all |
-| `INSTALL_S2SCRIPT` | S2Script framework and bundled plugins |
-| `INSTALL_MULTIADDONMANAGER` | MultiAddonManager native addon |
+| `INSTALL_S2SCRIPT` | S2Script framework and bundled plugins, including workshop addon mounting |
 | `INSTALL_GAMEFIXES` | GameFixes native addon |
 | `ENABLE_GUARD` | Advertising and console-spam bots bother you. See [Guard](modules/guard.md) |
 | `ENABLE_FILTER` | The console is too noisy. Rules live in `egg/configs/console-filter.json` |

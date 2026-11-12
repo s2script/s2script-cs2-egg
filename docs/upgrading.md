@@ -6,7 +6,7 @@ Two things update on their own schedules: the image your servers run, and the da
 
 v2 replaces SteamRT3 with SteamRT4 for every server. Stable and beta are still release channels; both use RT4 in v2. The host node daemon and shared CS2 files retain their existing setup. Host SteamCMD remains separate from the container runtime.
 
-Before upgrading, back up the server volume and record native addon version pins. MultiAddonManager must have an explicit SteamRT4 release asset; update old panel or node pins that only provide Linux/RT3 builds. Keep Metamod compatible with the selected addon versions.
+Before upgrading, back up the server volume and record native addon version pins. Keep Metamod compatible with the selected addon versions.
 
 Select `ghcr.io/s2script/s2script-cs2-egg:v2.0.0`, or `:stable` after v2.0.0 is published. Fully stop and start the server so Wings recreates its container. The egg reinstalls selected native addons when their existing receipts lack RT4 identity, including at an unchanged release version. Private configs and data are preserved. This first migration needs access to the selected release metadata and archives, directly or through the node cache; an outage cannot validate old RT3 receipts.
 

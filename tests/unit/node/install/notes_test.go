@@ -23,7 +23,7 @@ func TestModuleNotes(t *testing.T) {
 		mod  any
 		want []string
 	}{
-		{"workshop", workshop.New(nil, nil), []string{"next boot", "RedownloadAddonOnMount", "mm_addon_mount_download"}},
+		{"workshop", workshop.New(nil, nil), []string{"next boot", "RedownloadAddonOnMount", "addons_mount_download"}},
 		{"guard", guard.New(nil), []string{"ENABLE_GUARD=1"}},
 		{"addoncache", addoncache.New(nil, nil), []string{"cs2node pin"}},
 		{"cleanup", cleanup.New(nil), []string{"cleanup.json", "modules.cleanup.rules"}},

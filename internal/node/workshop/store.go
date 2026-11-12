@@ -20,7 +20,7 @@ import (
 // AppID is CS2. Nothing else is cached.
 const AppID = "730"
 
-// Paths inside a server volume. CS2 and MultiAddonManager both download
+// Paths inside a server volume. CS2 and S2Script's addonmanager both download
 // through the game's own Steam client, next to the engine binary.
 const (
 	VolWorkshop = "game/bin/linuxsteamrt64/steamapps/workshop"

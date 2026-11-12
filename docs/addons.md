@@ -4,12 +4,11 @@
 |---|---|---|
 | [Metamod](https://github.com/alliedmodders/metamod-source) | `INSTALL_METAMOD` | Node version pin |
 | [S2Script](https://github.com/s2script/s2script) | `INSTALL_S2SCRIPT` | `S2SCRIPT_VERSION` |
-| [MultiAddonManager](https://github.com/Source2ZE/MultiAddonManager) | `INSTALL_MULTIADDONMANAGER` | `MULTIADDONMANAGER_VERSION` |
 | [GameFixes](https://github.com/SlynxCZ/GameFixes_mm) | `INSTALL_GAMEFIXES` | `GAMEFIXES_VERSION` |
 
-S2Script and both native addons automatically require Metamod. No other scripting framework is installed. v2 runs on SteamRT4 and selects only MultiAddonManager's explicit `-steamrt4.tar.gz` archives. GameFixes publishes one Linux archive. Downloads are staged and checked before installation, preserving private configs and data. S2Script requires the publisher's SHA-256 digest; native addons verify a digest when supplied.
+S2Script and GameFixes automatically require Metamod. No other scripting framework is installed. GameFixes publishes one Linux archive. Downloads are staged and checked before installation, preserving private configs and data. S2Script requires the publisher's SHA-256 digest; native addons verify a digest when supplied.
 
-Native installation receipts include the target runtime. The first v2 boot reinstalls selected native addons with legacy or different-runtime receipts, even at the same release tag. A MultiAddonManager pin without an RT4 asset fails startup; select a compatible release. A newer installed addon whose runtime cannot be verified also fails rather than silently downgrading: pin its exact version to repair it. Transient outages retain only installations whose files and RT4 receipts verify. See [upgrading to v2](upgrading.md#v200-steamrt4).
+Native installation receipts include the target runtime. The first v2 boot reinstalls selected native addons with legacy or different-runtime receipts, even at the same release tag. A newer installed addon whose runtime cannot be verified also fails rather than silently downgrading: pin its exact version to repair it. Transient outages retain only installations whose files and RT4 receipts verify. See [upgrading to v2](upgrading.md#v200-steamrt4).
 
 Some S2Script releases, including v0.12.2, mark their shim as requiring an executable stack. Before launching the game, the egg inspects the installed ELF. When required, it adds glibc's documented `glibc.rtld.execstack=2` compatibility setting to the game launch environment and logs a warning. This permits an executable stack in the launch shell and descendants, as the affected plugin requests; publisher binaries and checksums remain intact. Other glibc tunables are preserved. Explicit conflicting execstack settings, or `glibc.rtld.enable_secure=1` which disables other tunables, stop startup with a repair instruction. A shim with a non-executable stack does not trigger this setting. See the [glibc documentation](https://sourceware.org/glibc/manual/latest/html_node/Dynamic-Linking-Tunables.html).
 
@@ -19,7 +18,31 @@ Automatic Metamod updates always select the newest Source 2 prerelease, regardle
 
 ## Bundled plugins
 
-The 20 `S2SCRIPT_PLUGIN_*` panel switches accept `default`, `1`, or `0`. `default` preserves policy and existing placement. Explicit `1` enables a bundled package; `0` disables it. When a bundled plugin is also a dependency in the native manifest, explicit switches update its `disabled` entry so the runtime keeps that choice. Updates preserve configs/data, private packages, and disabled choices. Duplicate active/disabled identities are errors.
+The 21 `S2SCRIPT_PLUGIN_*` panel switches accept `default`, `1`, or `0`. `default` preserves policy and existing placement. Explicit `1` enables a bundled package; `0` disables it. When a bundled plugin is also a dependency in the native manifest, explicit switches update its `disabled` entry so the runtime keeps that choice. Updates preserve configs/data, private packages, and disabled choices. Duplicate active/disabled identities are errors.
+
+## Moving off MultiAddonManager
+
+The egg no longer installs or updates [MultiAddonManager](https://github.com/Source2ZE/MultiAddonManager). S2Script's bundled `addonmanager` plugin (`S2SCRIPT_PLUGIN_ADDONMANAGER`, enabled by default) mounts workshop addons on the server and sends them to clients itself. The two hook the same engine functions, so a server must not load both.
+
+On the first boot where S2Script is installed and its `addonmanager` plugin is enabled (whether or not `INSTALL_S2SCRIPT` keeps it updated), the egg retires an existing MultiAddonManager install:
+
+1. If `cfg/multiaddonmanager/multiaddonmanager.cfg` lists addons, the settings are written to `addons/s2script/configs/_s2script_addonmanager.json` under their new names. When that file is the default S2Script ships (no addons listed), the values are filled in and its comments kept. A config that already lists addons is never changed; the egg logs a warning instead.
+2. `addons/metamod/multiaddonmanager.vdf`, `addons/multiaddonmanager/bin/` and the egg's install receipt are removed. MultiAddonManager's cfg directory stays for reference.
+
+Without an enabled `addonmanager`, the egg leaves MultiAddonManager's files alone and logs a warning each boot.
+
+| MultiAddonManager | addonmanager |
+|---|---|
+| `mm_extra_addons` | `addons_extra` |
+| `mm_client_extra_addons` | `addons_client_extra` |
+| `mm_extra_addons_timeout` | `addons_extra_timeout` |
+| `mm_addon_connection_timeout` | `addons_connection_timeout` |
+| `mm_addon_mount_download` | `addons_mount_download` |
+| `mm_cache_clients_with_addons` | `addons_cache_clients` |
+| `mm_cache_clients_duration` | `addons_cache_duration` |
+| `mm_block_disconnect_messages` | `addons_block_disconnect_messages` |
+
+Only the MultiAddonManager cfg file is read. Settings passed as `+mm_*` startup parameters or set in `server.cfg` must be moved by hand, and those `mm_*` lines can then be deleted. The `INSTALL_MULTIADDONMANAGER` and `MULTIADDONMANAGER_VERSION` panel variables and the `multiaddonmanager` node pin are removed; an old node config that still has the pin keeps working and the pin is ignored.
 
 ## Custom translations
 
@@ -70,7 +93,6 @@ See the [upstream server manifest design](https://github.com/s2script/s2script/b
 
 ```bash
 sudo cs2node pin s2script v0.8.1
-sudo cs2node pin multiaddonmanager v1.6.2
 sudo cs2node pin gamefixes v1.0.14
 sudo cs2node unpin s2script
 ```

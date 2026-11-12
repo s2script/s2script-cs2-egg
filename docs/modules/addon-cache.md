@@ -1,6 +1,6 @@
 # Addon cache
 
-Every server boot asks GitHub for the current Metamod, S2Script, MultiAddonManager or GameFixes release. Twenty servers restarting after a CS2 update is twenty identical API calls from one address, which is how you hit GitHub's rate limit and see update checks skipped.
+Every server boot asks GitHub for the current Metamod, S2Script or GameFixes release. Twenty servers restarting after a CS2 update is twenty identical API calls from one address, which is how you hit GitHub's rate limit and see update checks skipped.
 
 With this module the egg asks the node instead. The node fetches a release once, keeps the answer for `refresh_minutes`, downloads a file once, and copies it into the server volume. A server that cannot reach a node goes to GitHub itself, exactly as before.
 
@@ -36,7 +36,7 @@ If the node cannot find a pinned version, the server keeps what it has and says 
   "keep_days": 30,
   "pin_versions": true,
   "pin_metamod": "2.0.0-git1450",
-  "pin_s2script": "", "pin_multiaddonmanager": "", "pin_gamefixes": "",
+  "pin_s2script": "", "pin_gamefixes": "",
   "pin_per_server": { "<server id>": { "pin_metamod": "git1400" } }
 }
 ```

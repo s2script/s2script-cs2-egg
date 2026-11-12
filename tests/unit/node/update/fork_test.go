@@ -42,14 +42,14 @@ func TestForkDiscoversOwnServersWithoutManagingUpstreamServers(t *testing.T) {
 }
 
 func TestOnlySupportedNativeAddonsCanBePinned(t *testing.T) {
-	for repo, want := range map[string]string{"s2script/s2script": "s2script", "Source2ZE/MultiAddonManager": "multiaddonmanager", "SlynxCZ/GameFixes_mm": "gamefixes"} {
+	for repo, want := range map[string]string{"s2script/s2script": "s2script", "SlynxCZ/GameFixes_mm": "gamefixes"} {
 		if got := addons.KeyForRepo(repo); got != want {
 			t.Errorf("pin lookup %s: %q", repo, got)
 		}
 	}
-	for _, repo := range []string{"roflmuffin/CounterStrikeSharp", "swiftly-solution/swiftlys2", "Kxnrl/modsharp-public"} {
+	for _, repo := range []string{"roflmuffin/CounterStrikeSharp", "swiftly-solution/swiftlys2", "Kxnrl/modsharp-public", "Source2ZE/MultiAddonManager"} {
 		if addons.KeyForRepo(repo) != "" {
-			t.Errorf("removed framework remains pinnable: %s", repo)
+			t.Errorf("removed addon remains pinnable: %s", repo)
 		}
 	}
 }

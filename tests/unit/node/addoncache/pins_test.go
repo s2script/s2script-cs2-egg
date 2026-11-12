@@ -118,6 +118,11 @@ func TestPinPrecedenceGlobalPerServerAndOff(t *testing.T) {
 	if err := (addoncache.Config{Dir: "/x", RefreshMinutes: 1, PinPerServer: map[string]map[string]string{"s": {"pin_nope": "1"}}}).Check(); err == nil {
 		t.Fatal("an unknown addon in pin_per_server must be refused")
 	}
+	// MultiAddonManager was pinnable before S2Script replaced it; an old
+	// config that still carries the pin must keep the daemon starting.
+	if err := (addoncache.Config{Dir: "/x", RefreshMinutes: 1, PinPerServer: map[string]map[string]string{"s": {"pin_multiaddonmanager": "v1.6.2"}}}).Check(); err != nil {
+		t.Fatalf("a retired pin must be ignored, got %v", err)
+	}
 }
 
 func TestPinCommandsWriteTheConfig(t *testing.T) {
@@ -199,7 +204,7 @@ func TestModuleConfigSurvivesAWizardRoundTrip(t *testing.T) {
 	// the wizard stores answers as a plain map, so the keys must match the
 	// struct tags or a pin typed in the installer would vanish
 	section := map[string]any{"enabled": true, "dir": "/var/lib/cs2node/addoncache", "refresh_minutes": 60, "keep_days": 30,
-		"pin_versions": true, "pin_metamod": "git1450", "pin_s2script": "", "pin_multiaddonmanager": "", "pin_gamefixes": ""}
+		"pin_versions": true, "pin_metamod": "git1450", "pin_s2script": "", "pin_gamefixes": ""}
 	raw, err := json.Marshal(section)
 	if err != nil {
 		t.Fatal(err)

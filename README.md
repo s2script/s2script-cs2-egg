@@ -2,7 +2,7 @@
 
 A downstream fork of [K4ryuu/CS2-Egg-Go](https://github.com/K4ryuu/CS2-Egg-Go) for Pelican and Pterodactyl. It keeps upstream startup, node discovery, shared CS2 files and node modules, with **S2Script as the only scripting framework**.
 
-Included: Metamod, the S2Script auto-updater and plugin manager, [MultiAddonManager](https://github.com/Source2ZE/MultiAddonManager), and [GameFixes](https://github.com/SlynxCZ/GameFixes_mm). CounterStrikeSharp, ModSharp and Swiftly installers are removed.
+Included: Metamod, the S2Script auto-updater and plugin manager, and [GameFixes](https://github.com/SlynxCZ/GameFixes_mm). Workshop addons are mounted by S2Script's bundled `addonmanager` plugin, which replaces MultiAddonManager; see [moving off MultiAddonManager](docs/addons.md#moving-off-multiaddonmanager). CounterStrikeSharp, ModSharp and Swiftly installers are removed.
 
 **v2.0.0 runs on SteamRT4 only** (Debian 13 userspace). Existing servers migrate native addons on their first v2 startup while preserving private configs and data. Review the [v2 upgrade instructions](docs/upgrading.md#v200-steamrt4) before switching an existing server.
 
@@ -60,7 +60,6 @@ examples, existing-config behavior and restart timing.
 | `INSTALL_S2SCRIPT` | `1` | Install/check S2Script on startup |
 | `S2SCRIPT_CHANNEL` | `stable` | Framework channel, separate from the image channel |
 | `S2SCRIPT_VERSION` | empty | Optional exact framework release tag |
-| `INSTALL_MULTIADDONMANAGER` | `1` | Install/update MultiAddonManager |
 | `INSTALL_GAMEFIXES` | `1` | Install/update GameFixes |
 | `S2SCRIPT_PLUGIN_*` controls | `default` | Preserve policy/manual choices, or explicitly enable/disable bundled plugins |
 

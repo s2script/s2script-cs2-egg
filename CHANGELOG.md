@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stop installing MultiAddonManager: S2Script's bundled `addonmanager` plugin mounts workshop addons natively. On boot, an existing MultiAddonManager install is unloaded and its addon settings move to the addonmanager config. `INSTALL_MULTIADDONMANAGER`, `MULTIADDONMANAGER_VERSION` and the `multiaddonmanager` node pin are removed.
+- Register the S2Script `addonmanager` bundled plugin (`S2SCRIPT_PLUGIN_ADDONMANAGER`).
 - Merge newly shipped translation phrases during S2Script framework updates while preserving custom wording, keys, and language catalogs.
 - Show S2Script and EdgeGamers terminal artwork at the start of the node installer wizard.
 - Support five-field cron password decay schedules with named timezones while preserving legacy intervals and saved deadlines.

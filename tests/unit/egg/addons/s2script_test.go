@@ -192,6 +192,7 @@ func TestS2ScriptRegistersNewBundledPlugins(t *testing.T) {
 	}{
 		{"@s2script/workshopmaps", "addons/s2script/plugins/_s2script_workshopmaps.s2sp"},
 		{"@s2script/mapchooser", "addons/s2script/plugins/disabled/_s2script_mapchooser.s2sp"},
+		{"@s2script/addonmanager", "addons/s2script/plugins/_s2script_addonmanager.s2sp"},
 	} {
 		for _, interrupted := range []bool{false, true} {
 			name := plugin.name + "/fresh"

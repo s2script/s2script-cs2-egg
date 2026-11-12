@@ -26,10 +26,8 @@ import (
 // NativeOptions selects the native Metamod plugins and optional exact release
 // tags. An empty version or "latest" follows the release channel in Env.
 type NativeOptions struct {
-	MultiAddonManager        bool
-	GameFixes                bool
-	MultiAddonManagerVersion string
-	GameFixesVersion         string
+	GameFixes        bool
+	GameFixesVersion string
 }
 
 type nativeAddon struct {
@@ -47,12 +45,6 @@ func (e *Env) UpdateNative(ctx context.Context, options NativeOptions) error {
 		enabled bool
 		addon   nativeAddon
 	}{
-		{options.MultiAddonManager, nativeAddon{
-			label: "MultiAddonManager", repo: RepoMultiAddonManager, version: options.MultiAddonManagerVersion,
-			dir: "multiaddonmanager", binary: "bin/multiaddonmanager.so", config: "cfg/multiaddonmanager",
-			// v2 only runs on SteamRT4; legacy Linux/RT3 builds are not fallbacks.
-			asset: regexp.MustCompile(`(?i)^MultiAddonManager[-_].*-steamrt4\.tar\.gz$`),
-		}},
 		{options.GameFixes, nativeAddon{
 			label: "GameFixes", repo: RepoGameFixes, version: options.GameFixesVersion,
 			dir: "game_fixes", binary: "bin/linuxsteamrt64/game_fixes.so",
