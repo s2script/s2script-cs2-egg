@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -76,8 +77,9 @@ func gameFileExists(serverRoot, rel string) bool {
 // RetireMultiAddonManager stops Metamod from loading MultiAddonManager and
 // carries its settings over to S2Script's addonmanager plugin.
 //
-// The settings move only when the plugin has no config yet, so an operator's
-// own addonmanager config always wins. MultiAddonManager's cfg directory is
+// The settings move only while the plugin's config lists no addons (a missing
+// file, or the defaults an S2Script release ships), so an operator's own
+// addonmanager lists always win. MultiAddonManager's cfg directory is
 // left in place for reference; only the files the egg used to manage (the
 // loader, the binaries and the install receipt) are removed. The loader goes
 // last: until it is gone, the next boot tries again.
@@ -139,21 +141,32 @@ func (e *Env) migrateMultiAddonManager(root *os.Root) error {
 	if err := nativeCheckParents(root, AddonManagerConfig); err != nil {
 		return err
 	}
-	if _, err := root.Lstat(AddonManagerConfig); err == nil {
-		e.Log.Logf(logx.Warning, "MultiAddonManager settings were not moved: %s already exists. Copy anything still needed from %s by hand", AddonManagerConfig, mamConfig)
-		return nil
-	} else if !errors.Is(err, fs.ErrNotExist) {
+	var out []byte
+	existing, err := root.ReadFile(AddonManagerConfig)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		if out, err = json.MarshalIndent(values, "", "  "); err != nil {
+			return err
+		}
+		out = append(out, '\n')
+	case err != nil:
 		return err
-	}
-	out, err := json.MarshalIndent(values, "", "  ")
-	if err != nil {
-		return err
+	default:
+		// S2Script releases ship each bundled plugin's default config, so the
+		// file usually exists by now. One that lists no addons holds no
+		// operator choice yet: fill in the moved values, keeping its comments.
+		merged, ok := mergeAddonManagerConfig(existing, values)
+		if !ok {
+			e.Log.Logf(logx.Warning, "MultiAddonManager settings were not moved: %s already lists addons. Copy anything still needed from %s by hand", AddonManagerConfig, mamConfig)
+			return nil
+		}
+		out = merged
 	}
 	if err := root.MkdirAll(path.Dir(AddonManagerConfig), 0o755); err != nil {
 		return err
 	}
 	tmp := AddonManagerConfig + ".tmp"
-	if err := writeFile(root, tmp, bytes.NewReader(append(out, '\n')), 0o644); err != nil {
+	if err := writeFile(root, tmp, bytes.NewReader(out), 0o644); err != nil {
 		return err
 	}
 	if err := root.Rename(tmp, AddonManagerConfig); err != nil {
@@ -163,6 +176,117 @@ func (e *Env) migrateMultiAddonManager(root *os.Root) error {
 	e.Log.Logf(logx.Success, "Moved MultiAddonManager settings to %s", AddonManagerConfig)
 	return nil
 }
+
+// mergeAddonManagerConfig writes values into an existing JSONC config that
+// lists no addons yet, line by line so its comments survive. It reports false
+// when the file already lists addons or is not a config it can edit safely.
+func mergeAddonManagerConfig(existing []byte, values map[string]any) ([]byte, bool) {
+	var current map[string]any
+	if json.Unmarshal(stripJSONComments(existing), &current) != nil {
+		return nil, false
+	}
+	for _, key := range []string{"addons_extra", "addons_client_extra"} {
+		if v, _ := current[key].(string); strings.TrimSpace(v) != "" {
+			return nil, false
+		}
+	}
+	lines := strings.Split(string(existing), "\n")
+	done := map[string]bool{}
+	for i, line := range lines {
+		m := jsoncMember.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		v, ok := values[m[2]]
+		if !ok || done[m[2]] {
+			continue
+		}
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			return nil, false
+		}
+		lines[i] = m[1] + string(encoded) + m[4]
+		done[m[2]] = true
+	}
+	var missing []string
+	for _, s := range mamSettings {
+		if _, ok := values[s.key]; ok && !done[s.key] {
+			encoded, err := json.Marshal(values[s.key])
+			if err != nil {
+				return nil, false
+			}
+			missing = append(missing, "  "+strconv.Quote(s.key)+": "+string(encoded)+",")
+		}
+	}
+	if len(missing) > 0 {
+		open := -1
+		for i, line := range lines {
+			if strings.TrimSpace(line) == "{" {
+				open = i
+				break
+			}
+		}
+		if open < 0 {
+			return nil, false
+		}
+		lines = append(lines[:open+1], append(missing, lines[open+1:]...)...)
+	}
+	out := []byte(strings.Join(lines, "\n"))
+	// Keep the result only when it still parses and says what was moved.
+	var check map[string]any
+	if json.Unmarshal(stripJSONComments(out), &check) != nil {
+		return nil, false
+	}
+	for key, want := range values {
+		if fmt.Sprint(check[key]) != fmt.Sprint(want) {
+			return nil, false
+		}
+	}
+	return out, true
+}
+
+// jsoncMember matches one `"key": value` line, capturing the prefix, key,
+// value and the trailing comma and comment.
+var jsoncMember = regexp.MustCompile(`^(\s*"([a-z_]+)"\s*:\s*)("(?:[^"\\]|\\.)*"|[^,/\s]+)(\s*,?\s*(?://.*)?)$`)
+
+// stripJSONComments removes // and /* */ comments outside strings and the
+// trailing commas they can leave, enough to read S2Script's JSONC configs.
+func stripJSONComments(data []byte) []byte {
+	var out bytes.Buffer
+	inString := false
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+		switch {
+		case inString:
+			out.WriteByte(c)
+			if c == '\\' && i+1 < len(data) {
+				i++
+				out.WriteByte(data[i])
+			} else if c == '"' {
+				inString = false
+			}
+		case c == '"':
+			inString = true
+			out.WriteByte(c)
+		case c == '/' && i+1 < len(data) && data[i+1] == '/':
+			for i < len(data) && data[i] != '\n' {
+				i++
+			}
+			out.WriteByte('\n')
+		case c == '/' && i+1 < len(data) && data[i+1] == '*':
+			end := bytes.Index(data[i+2:], []byte("*/"))
+			if end < 0 {
+				return out.Bytes()
+			}
+			i += end + 3
+		default:
+			out.WriteByte(c)
+		}
+	}
+	return trailingComma.ReplaceAll(out.Bytes(), []byte("$1"))
+}
+
+var trailingComma = regexp.MustCompile(`,(\s*[}\]])`)
 
 // ParseMultiAddonManagerConfig reads MultiAddonManager's convars from a
 // Source cfg file and returns them under addonmanager's keys, typed the way
