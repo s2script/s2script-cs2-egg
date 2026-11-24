@@ -33,7 +33,7 @@ type nativeFixture struct {
 }
 
 var nativeFixtures = []nativeFixture{
-	{"SlynxCZ/GameFixes_mm", "GameFixes", "GameFixes_mm_v1.0.14-linux.tar.gz", "addons/game_fixes/bin/linuxsteamrt64/game_fixes.so", "addons/metamod/game_fixes.vdf", "addons/game_fixes/bin/linuxsteamrt64/game_fixes", "addons/game_fixes/game_fixes.ini"},
+	{"s2script/GameFixes_mm", "GameFixes", "GameFixes_mm_v1.0.14-linux.tar.gz", "addons/game_fixes/bin/linuxsteamrt64/game_fixes.so", "addons/metamod/game_fixes.vdf", "addons/game_fixes/bin/linuxsteamrt64/game_fixes", "addons/game_fixes/game_fixes.ini"},
 }
 
 func nativeTar(t *testing.T, files map[string]string) []byte {
@@ -211,7 +211,7 @@ func TestNativePrereleaseUsesReleaseList(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/repos/SlynxCZ/GameFixes_mm/releases":
+		case "/repos/s2script/GameFixes_mm/releases":
 			_ = json.NewEncoder(w).Encode([]map[string]any{{"tag_name": "v3.0.0-beta", "prerelease": true, "assets": []map[string]string{{"name": f.name, "browser_download_url": srv.URL + "/asset"}}}})
 		case "/asset":
 			_, _ = w.Write(archive)
@@ -285,7 +285,7 @@ func TestNativeNodeCacheSelectsLinuxAssetOrRejectsIncompatiblePin(t *testing.T) 
 			f := nativeFixtures[0]
 			e := nativeEnv(t)
 			archive := nativeTar(t, nativeFiles(f))
-			const assetURL = "https://github.com/SlynxCZ/GameFixes_mm/releases/download/v2.0.0/GameFixes_mm_v1.0.14-linux.tar.gz"
+			const assetURL = "https://github.com/s2script/GameFixes_mm/releases/download/v2.0.0/GameFixes_mm_v1.0.14-linux.tar.gz"
 			nativeWrite(t, e.Root, "egg/cache/native.tar.gz", string(archive))
 			e.Node = func(q *proto.AddonQuery) *proto.AddonRelease {
 				if q.Repo == f.repo {

@@ -42,7 +42,7 @@ func TestForkDiscoversOwnServersWithoutManagingUpstreamServers(t *testing.T) {
 }
 
 func TestOnlySupportedNativeAddonsCanBePinned(t *testing.T) {
-	for repo, want := range map[string]string{"s2script/s2script": "s2script", "SlynxCZ/GameFixes_mm": "gamefixes"} {
+	for repo, want := range map[string]string{"s2script/s2script": "s2script", "s2script/GameFixes_mm": "gamefixes"} {
 		if got := addons.KeyForRepo(repo); got != want {
 			t.Errorf("pin lookup %s: %q", repo, got)
 		}

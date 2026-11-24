@@ -272,7 +272,7 @@
         },
         {
             "name": "GameFixes",
-            "description": "Install/update GameFixes_mm from SlynxCZ. Existing game_fixes.ini is preserved. Set 0 to leave installed files untouched.",
+            "description": "Install/update GameFixes_mm from s2script/GameFixes_mm (the maintained fork of SlynxCZ/GameFixes_mm). Existing game_fixes.ini is preserved. Set 0 to leave installed files untouched.",
             "env_variable": "INSTALL_GAMEFIXES",
             "default_value": "1",
             "user_viewable": true,
