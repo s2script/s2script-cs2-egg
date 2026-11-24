@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Install GameFixes from `s2script/GameFixes_mm`, the maintained fork of the archived `SlynxCZ/GameFixes_mm` (from v1.0.19, built for CS2 build 26879581). A `GAMEFIXES_VERSION` or node `gamefixes` pin must name a release the fork publishes.
 - Raise the plugin metadata limits (lock, inventory, native manifest/lock to 128 MiB; one manifest to 16 MiB). Interop plugins embed their typed contracts in manifests, and a TTT server's lock outgrew 4 MiB.
 - Stop installing MultiAddonManager: S2Script's bundled `addonmanager` plugin mounts workshop addons natively. On boot, an existing MultiAddonManager install is unloaded and its addon settings move to the addonmanager config. `INSTALL_MULTIADDONMANAGER`, `MULTIADDONMANAGER_VERSION` and the `multiaddonmanager` node pin are removed.
 - Register the S2Script `addonmanager` bundled plugin (`S2SCRIPT_PLUGIN_ADDONMANAGER`).

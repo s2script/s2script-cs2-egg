@@ -41,7 +41,10 @@ type Release struct {
 const (
 	RepoMetamod   = "alliedmodders/metamod-source"
 	RepoS2Script  = "s2script/s2script"
-	RepoGameFixes = "SlynxCZ/GameFixes_mm"
+	RepoGameFixes = "s2script/GameFixes_mm"
+	// RepoGameFixesArchived is where GameFixes came from before the fork;
+	// installs from it still verify.
+	RepoGameFixesArchived = "SlynxCZ/GameFixes_mm"
 )
 
 // Pinnable maps the name a version pin uses to the repo that serves it.

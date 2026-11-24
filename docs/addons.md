@@ -4,7 +4,7 @@
 |---|---|---|
 | [Metamod](https://github.com/alliedmodders/metamod-source) | `INSTALL_METAMOD` | Node version pin |
 | [S2Script](https://github.com/s2script/s2script) | `INSTALL_S2SCRIPT` | `S2SCRIPT_VERSION` |
-| [GameFixes](https://github.com/SlynxCZ/GameFixes_mm) | `INSTALL_GAMEFIXES` | `GAMEFIXES_VERSION` |
+| [GameFixes](https://github.com/s2script/GameFixes_mm) | `INSTALL_GAMEFIXES` | `GAMEFIXES_VERSION` |
 
 S2Script and GameFixes automatically require Metamod. No other scripting framework is installed. GameFixes publishes one Linux archive. Downloads are staged and checked before installation, preserving private configs and data. S2Script requires the publisher's SHA-256 digest; native addons verify a digest when supplied.
 
