@@ -411,6 +411,48 @@ func TestNativeOutageRejectsLegacyOrDifferentRuntimeEvidence(t *testing.T) {
 	}
 }
 
+// Receipts written while GameFixes came from the archived repo still verify, so
+// the first boot after the move survives an update-service outage; a receipt
+// naming any other repo does not.
+func TestNativeOutageKeepsInstallFromFormerRepo(t *testing.T) {
+	for repo, retain := range map[string]bool{addons.RepoGameFixesArchived: true, "someone/GameFixes_mm": false} {
+		t.Run(repo, func(t *testing.T) {
+			var f nativeFixture
+			for _, candidate := range nativeFixtures {
+				if candidate.key == "GameFixes" {
+					f = candidate
+				}
+			}
+			e := nativeEnv(t)
+			archive := nativeTar(t, nativeFiles(f))
+			nativeServer(t, e, f, archive, nativeDigest(archive), "latest", "v2.0.0")
+			if err := e.UpdateNative(context.Background(), nativeOptions(f, "latest")); err != nil {
+				t.Fatal(err)
+			}
+			dir := strings.TrimPrefix(strings.Split(f.binary, "/bin/")[0], "addons/")
+			rel := "egg/native-addons/" + dir + ".json"
+			var receipt map[string]any
+			if err := json.Unmarshal([]byte(nativeRead(t, e.Root, rel)), &receipt); err != nil {
+				t.Fatal(err)
+			}
+			receipt["repo"] = repo
+			data, err := json.Marshal(receipt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			nativeWrite(t, e.Root, rel, string(data))
+			nativeFailRelease(t, e, 503)
+			err = e.UpdateNative(context.Background(), nativeOptions(f, "latest"))
+			if retain && err != nil {
+				t.Fatalf("install from the former repo rejected during outage: %v", err)
+			}
+			if !retain && err == nil {
+				t.Fatal("install from an unrelated repo retained during outage")
+			}
+		})
+	}
+}
+
 func TestNativeRejectsExactTagMismatch(t *testing.T) {
 	f := nativeFixtures[0]
 	e := nativeEnv(t)

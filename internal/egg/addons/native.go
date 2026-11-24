@@ -18,6 +18,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/K4ryuu/CS2-Egg-Go/internal/logx"
@@ -33,6 +34,10 @@ type NativeOptions struct {
 type nativeAddon struct {
 	label, repo, version, dir, binary, config string
 	asset                                     *regexp.Regexp
+	// formerRepos are repos this addon was installed from before; their
+	// receipts still verify, so an install from one is kept through an
+	// update-service outage instead of failing startup.
+	formerRepos []string
 }
 
 const nativeTargetRuntime = "steamrt4"
@@ -48,7 +53,8 @@ func (e *Env) UpdateNative(ctx context.Context, options NativeOptions) error {
 		{options.GameFixes, nativeAddon{
 			label: "GameFixes", repo: RepoGameFixes, version: options.GameFixesVersion,
 			dir: "game_fixes", binary: "bin/linuxsteamrt64/game_fixes.so",
-			asset: regexp.MustCompile(`(?i)^GameFixes_mm[-_].*-linux\.tar\.gz$`),
+			asset:       regexp.MustCompile(`(?i)^GameFixes_mm[-_].*-linux\.tar\.gz$`),
+			formerRepos: []string{RepoGameFixesArchived},
 		}},
 	}
 	for _, item := range selected {
@@ -437,8 +443,12 @@ func nativeBuildEvidence(stage string, addon nativeAddon, version string) (nativ
 	return record, err
 }
 
+func (addon nativeAddon) ownsRepo(repo string) bool {
+	return repo == addon.repo || slices.Contains(addon.formerRepos, repo)
+}
+
 func (e *Env) nativeVerifyFiles(addon nativeAddon, record nativeEvidence) error {
-	if record.Format != 2 || record.Runtime != nativeTargetRuntime || record.Repo != addon.repo || record.Version == "" {
+	if record.Format != 2 || record.Runtime != nativeTargetRuntime || !addon.ownsRepo(record.Repo) || record.Version == "" {
 		return errors.New("native installation evidence has an invalid identity")
 	}
 	for _, required := range []string{"addons/" + addon.dir + "/" + addon.binary, "addons/metamod/" + addon.dir + ".vdf"} {
